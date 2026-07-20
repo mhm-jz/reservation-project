@@ -1,0 +1,20 @@
+services:
+  reservation-mysql:
+    image: mysql:8.4
+    container_name: reservation-mysql
+    restart: unless-stopped
+
+    environment:
+      MYSQL_DATABASE: reservation_db
+      MYSQL_USER: reservation_user
+      MYSQL_PASSWORD: reservation_password
+      MYSQL_ROOT_PASSWORD: root_password
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - reservation_mysql_data:/var/lib/mysql
+
+volumes:
+  reservation_mysql_data:

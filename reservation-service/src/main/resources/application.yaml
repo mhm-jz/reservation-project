@@ -2,5 +2,21 @@ spring:
   application:
     name: reservation-service
 
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/reservation_db}
+    username: ${DB_USERNAME:reservation_user}
+    password: ${DB_PASSWORD:reservation_password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+    open-in-view: false
+
+    properties:
+      hibernate:
+        format_sql: true
+
 server:
   port: 8080
