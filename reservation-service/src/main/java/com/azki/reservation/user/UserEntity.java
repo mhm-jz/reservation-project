@@ -1,6 +1,9 @@
 package com.azki.reservation.user;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -14,6 +17,8 @@ import java.time.LocalDateTime;
                 )
         }
 )
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserEntity {
 
     @Id
@@ -41,9 +46,6 @@ public class UserEntity {
     )
     private LocalDateTime createdAt;
 
-    protected UserEntity() {
-    }
-
     public UserEntity(String username, String passwordHash) {
         this.username = username;
         this.passwordHash = passwordHash;
@@ -51,22 +53,6 @@ public class UserEntity {
 
     @PrePersist
     void prePersist() {
-        this.createdAt = LocalDateTime.now();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+        createdAt = LocalDateTime.now();
     }
 }

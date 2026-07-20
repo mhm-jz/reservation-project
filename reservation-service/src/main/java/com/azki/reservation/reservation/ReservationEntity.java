@@ -3,6 +3,9 @@ package com.azki.reservation.reservation;
 import com.azki.reservation.slot.AvailableSlotEntity;
 import com.azki.reservation.user.UserEntity;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -14,14 +17,10 @@ import java.time.LocalDateTime;
                         name = "uk_reservations_slot_id",
                         columnNames = "slot_id"
                 )
-        },
-        indexes = {
-                @Index(
-                        name = "idx_reservations_user_created_at",
-                        columnList = "user_id, created_at"
-                )
         }
 )
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ReservationEntity {
 
     @Id
@@ -32,20 +31,14 @@ public class ReservationEntity {
             fetch = FetchType.LAZY,
             optional = false
     )
-    @JoinColumn(
-            name = "user_id",
-            nullable = false
-    )
+    @JoinColumn(name = "user_id", nullable = false)
     private UserEntity user;
 
     @ManyToOne(
             fetch = FetchType.LAZY,
             optional = false
     )
-    @JoinColumn(
-            name = "slot_id",
-            nullable = false
-    )
+    @JoinColumn(name = "slot_id", nullable = false)
     private AvailableSlotEntity slot;
 
     @Column(
@@ -54,9 +47,6 @@ public class ReservationEntity {
             updatable = false
     )
     private LocalDateTime createdAt;
-
-    protected ReservationEntity() {
-    }
 
     public ReservationEntity(
             UserEntity user,
@@ -68,22 +58,6 @@ public class ReservationEntity {
 
     @PrePersist
     void prePersist() {
-        this.createdAt = LocalDateTime.now();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public UserEntity getUser() {
-        return user;
-    }
-
-    public AvailableSlotEntity getSlot() {
-        return slot;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+        createdAt = LocalDateTime.now();
     }
 }

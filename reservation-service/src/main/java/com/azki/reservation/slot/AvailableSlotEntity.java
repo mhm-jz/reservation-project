@@ -1,6 +1,9 @@
 package com.azki.reservation.slot;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -14,28 +17,21 @@ import java.time.LocalDateTime;
                 )
         }
 )
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AvailableSlotEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(
-            name = "start_time",
-            nullable = false
-    )
+    @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;
 
-    @Column(
-            name = "end_time",
-            nullable = false
-    )
+    @Column(name = "end_time", nullable = false)
     private LocalDateTime endTime;
 
-    @Column(
-            name = "is_reserved",
-            nullable = false
-    )
+    @Column(name = "is_reserved", nullable = false)
     private boolean reserved;
 
     @Column(
@@ -45,14 +41,11 @@ public class AvailableSlotEntity {
     )
     private LocalDateTime createdAt;
 
-    protected AvailableSlotEntity() {
-    }
-
     public AvailableSlotEntity(
             LocalDateTime startTime,
             LocalDateTime endTime
     ) {
-        if (endTime.isBefore(startTime) || endTime.isEqual(startTime)) {
+        if (!endTime.isAfter(startTime)) {
             throw new IllegalArgumentException(
                     "Slot end time must be after start time"
             );
@@ -65,26 +58,6 @@ public class AvailableSlotEntity {
 
     @PrePersist
     void prePersist() {
-        this.createdAt = LocalDateTime.now();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public LocalDateTime getStartTime() {
-        return startTime;
-    }
-
-    public LocalDateTime getEndTime() {
-        return endTime;
-    }
-
-    public boolean isReserved() {
-        return reserved;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+        createdAt = LocalDateTime.now();
     }
 }
