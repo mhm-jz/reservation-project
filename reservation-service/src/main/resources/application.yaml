@@ -20,3 +20,9 @@ spring:
 
 server:
   port: 8080
+
+security:
+  jwt:
+#    secret: ${JWT_SECRET}
+    secret: "PtKhd0onRsnE8SgZUO4Jp2eBWYd3DTg9llEQ5DcyM+M="
+    access-token-expiration: 1h
