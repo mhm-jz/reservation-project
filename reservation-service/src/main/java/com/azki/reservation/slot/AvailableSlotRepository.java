@@ -39,4 +39,19 @@ public interface AvailableSlotRepository
             @Param("slotId") Long slotId,
             @Param("now") LocalDateTime now
     );
+
+
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query("""
+        update AvailableSlotEntity slot
+        set slot.reserved = false
+        where slot.id = :slotId
+          and slot.reserved = true
+        """)
+    int releaseReservedSlot(
+            @Param("slotId") Long slotId
+    );
 }

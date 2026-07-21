@@ -30,4 +30,18 @@ public class ReservationController {
                 authenticatedUser.getId()
         );
     }
+
+    @DeleteMapping("/{reservationId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelReservation(
+            @PathVariable Long reservationId,
+
+            @AuthenticationPrincipal
+            AuthenticatedUser authenticatedUser
+    ) {
+        reservationService.cancelReservation(
+                reservationId,
+                authenticatedUser.getId()
+        );
+    }
 }

@@ -1,8 +1,6 @@
 package com.azki.reservation.reservation;
 
-import com.azki.reservation.exception.SlotAlreadyReservedException;
-import com.azki.reservation.exception.SlotNotFoundException;
-import com.azki.reservation.exception.SlotUnavailableException;
+import com.azki.reservation.exception.*;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import com.azki.reservation.slot.AvailableSlotEntity;
 import com.azki.reservation.slot.AvailableSlotRepository;
@@ -89,5 +87,45 @@ public class ReservationService {
                 slot.getEndTime(),
                 reservation.getCreatedAt()
         );
+    }
+
+
+
+    @Transactional
+    public void cancelReservation(
+            Long reservationId,
+            Long userId
+    ) {
+        Long slotId = reservationRepository
+                .findSlotIdByReservationIdAndUserId(
+                        reservationId,
+                        userId
+                )
+                .orElseThrow(() ->
+                        new ReservationNotFoundException(
+                                reservationId
+                        )
+                );
+
+        int deletedRows = reservationRepository
+                .deleteByReservationIdAndUserId(
+                        reservationId,
+                        userId
+                );
+
+        if (deletedRows == 0) {
+            throw new ReservationNotFoundException(
+                    reservationId
+            );
+        }
+
+        int releasedRows = slotRepository
+                .releaseReservedSlot(slotId);
+
+        if (releasedRows == 0) {
+            throw new ReservationStateException(
+                    reservationId
+            );
+        }
     }
 }

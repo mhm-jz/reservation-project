@@ -92,4 +92,30 @@ public class GlobalExceptionHandler {
                 Instant.now()
         );
     }
+
+
+    @ExceptionHandler(ReservationNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleReservationNotFound(
+            ReservationNotFoundException exception
+    ) {
+        return new ErrorResponse(
+                "RESERVATION_NOT_FOUND",
+                exception.getMessage(),
+                Instant.now()
+        );
+    }
+
+
+    @ExceptionHandler(ReservationStateException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ErrorResponse handleReservationState(
+            ReservationStateException exception
+    ) {
+        return new ErrorResponse(
+                "RESERVATION_STATE_ERROR",
+                "Reservation could not be cancelled",
+                Instant.now()
+        );
+    }
 }
