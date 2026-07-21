@@ -16,5 +16,13 @@ services:
     volumes:
       - reservation_mysql_data:/var/lib/mysql
 
+  reservation-redis:
+    image: redis:7.4-alpine
+    container_name: reservation-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
 volumes:
   reservation_mysql_data:

@@ -9,7 +9,8 @@ import com.azki.reservation.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.azki.reservation.config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
 import java.time.LocalDateTime;
 
 @Service
@@ -20,6 +21,10 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final UserRepository userRepository;
 
+    @CacheEvict(
+            cacheNames = CacheConfig.AVAILABLE_SLOTS_CACHE,
+            allEntries = true
+    )
     @Transactional
     public ReservationResponse createReservation(
             Long slotId,
@@ -91,6 +96,10 @@ public class ReservationService {
 
 
 
+    @CacheEvict(
+            cacheNames = CacheConfig.AVAILABLE_SLOTS_CACHE,
+            allEntries = true
+    )
     @Transactional
     public void cancelReservation(
             Long reservationId,

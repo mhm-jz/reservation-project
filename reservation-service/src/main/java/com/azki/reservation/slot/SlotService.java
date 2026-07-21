@@ -8,7 +8,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.azki.reservation.config.CacheConfig;
+import org.springframework.cache.annotation.Cacheable;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -17,7 +18,10 @@ import java.util.List;
 public class SlotService {
 
     private final AvailableSlotRepository slotRepository;
-
+    @Cacheable(
+            cacheNames = CacheConfig.AVAILABLE_SLOTS_CACHE,
+            key = "#root.args[0] + ':' + #root.args[1]"
+    )
     @Transactional(readOnly = true)
     public SlotPageResponse getAvailableSlots(
             int page,

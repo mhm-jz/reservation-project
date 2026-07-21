@@ -18,11 +18,22 @@ spring:
       hibernate:
         format_sql: true
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
+
+  cache:
+    type: redis
+    cache-names:
+      - available-slots
+
 server:
   port: 8080
 
 security:
   jwt:
-#    secret: ${JWT_SECRET}
     secret: "PtKhd0onRsnE8SgZUO4Jp2eBWYd3DTg9llEQ5DcyM+M="
     access-token-expiration: 1h
