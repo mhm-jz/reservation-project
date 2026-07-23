@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.azki.reservation.slot.dto.AvailableSlotResponse;
 
 public interface AvailableSlotRepository
         extends JpaRepository<AvailableSlotEntity, Long> {
@@ -47,6 +48,23 @@ public interface AvailableSlotRepository
             @Param("cursorStartTime") LocalDateTime cursorStartTime,
             @Param("cursorId") Long cursorId,
             Pageable pageable
+    );
+
+    @Query("""
+            select new com.azki.reservation.slot.dto.AvailableSlotResponse(
+                    slot.id,
+                    slot.startTime,
+                    slot.endTime
+            )
+            from AvailableSlotEntity slot
+            where slot.reserved = false
+              and slot.startTime >= :from
+              and slot.startTime < :to
+            order by slot.startTime asc, slot.id asc
+            """)
+    List<AvailableSlotResponse> findAvailableSlotDtos(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
     );
 
     @Modifying(

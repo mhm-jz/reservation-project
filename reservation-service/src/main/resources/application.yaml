@@ -22,13 +22,12 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      connect-timeout: 2s
-      timeout: 2s
+      connect-timeout: 1s
+      timeout: 1s
 
-  cache:
-    type: redis
-    cache-names:
-      - available-slots
+app:
+  slots-cache:
+    enabled: ${SLOTS_CACHE_ENABLED:true}
 
 server:
   port: 8080

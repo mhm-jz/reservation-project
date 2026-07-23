@@ -4,13 +4,13 @@ import com.azki.reservation.exception.*;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import com.azki.reservation.slot.AvailableSlotEntity;
 import com.azki.reservation.slot.AvailableSlotRepository;
+import com.azki.reservation.slot.SlotAvailabilityChangedEvent;
 import com.azki.reservation.user.UserEntity;
 import com.azki.reservation.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.azki.reservation.config.CacheConfig;
-import org.springframework.cache.annotation.CacheEvict;
 import java.time.LocalDateTime;
 
 @Service
@@ -20,11 +20,8 @@ public class ReservationService {
     private final AvailableSlotRepository slotRepository;
     private final ReservationRepository reservationRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    @CacheEvict(
-            cacheNames = CacheConfig.AVAILABLE_SLOTS_CACHE,
-            allEntries = true
-    )
     @Transactional
     public ReservationResponse createReservation(
             Long slotId,
@@ -54,6 +51,12 @@ public class ReservationService {
 
         ReservationEntity savedReservation =
                 reservationRepository.save(reservation);
+
+        eventPublisher.publishEvent(
+                new SlotAvailabilityChangedEvent(
+                        slot.getStartTime().toLocalDate()
+                )
+        );
 
         return toResponse(savedReservation);
     }
@@ -96,10 +99,6 @@ public class ReservationService {
 
 
 
-    @CacheEvict(
-            cacheNames = CacheConfig.AVAILABLE_SLOTS_CACHE,
-            allEntries = true
-    )
     @Transactional
     public void cancelReservation(
             Long reservationId,
@@ -136,5 +135,15 @@ public class ReservationService {
                     reservationId
             );
         }
+
+        AvailableSlotEntity slot = slotRepository
+                .findById(slotId)
+                .orElseThrow(() -> new SlotNotFoundException(slotId));
+
+        eventPublisher.publishEvent(
+                new SlotAvailabilityChangedEvent(
+                        slot.getStartTime().toLocalDate()
+                )
+        );
     }
 }
