@@ -29,29 +29,42 @@ public class SlotDayCache {
                     Long.class
             );
 
-    private final AvailableSlotRepository slotRepository;
+    private final SlotQueryService slotQueryService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
     @Value("${app.slots-cache.enabled:true}")
     private boolean enabled;
 
-    public List<AvailableSlotResponse> getDay(LocalDate day) {
-        if (!enabled) {
-            return loadFromMySql(day);
-        }
-
+    public DayCacheResult getDay(LocalDate day) {
         try {
             String version = getVersion(day);
             String dataKey = dataKey(day, version);
             String cached = redisTemplate.opsForValue().get(dataKey);
             if (cached != null) {
-                return deserialize(cached);
+                List<AvailableSlotResponse> slots;
+                try {
+                    slots = deserialize(cached);
+                } catch (Exception exception) {
+                    if (!deleteCorruptEntry(dataKey)) {
+                        return DayCacheResult.redisFailure();
+                    }
+                    return rebuildOrWait(day, version, dataKey);
+                }
+
+                if (version.equals(getVersion(day))) {
+                    return DayCacheResult.available(slots);
+                }
+                return DayCacheResult.fallback();
             }
             return rebuildOrWait(day, version, dataKey);
         } catch (Exception ignored) {
-            return loadFromMySql(day);
+            return DayCacheResult.redisFailure();
         }
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public void incrementVersion(LocalDate day) {
@@ -66,7 +79,7 @@ public class SlotDayCache {
         }
     }
 
-    private List<AvailableSlotResponse> rebuildOrWait(
+    private DayCacheResult rebuildOrWait(
             LocalDate day,
             String version,
             String dataKey
@@ -77,39 +90,55 @@ public class SlotDayCache {
                 .setIfAbsent(lockKey, lockToken, LOCK_TTL);
 
         if (Boolean.TRUE.equals(acquired)) {
+            List<AvailableSlotResponse> slots;
             try {
-                List<AvailableSlotResponse> slots = loadFromMySql(day);
+                slots = slotQueryService.loadDay(day);
+            } catch (RuntimeException exception) {
+                releaseLock(lockKey, lockToken);
+                throw exception;
+            }
+
+            boolean redisAvailable = true;
+            try {
                 redisTemplate.opsForValue().set(
                         dataKey,
                         objectMapper.writeValueAsString(slots),
                         cacheTtl()
                 );
-                return slots;
-            } finally {
-                releaseLock(lockKey, lockToken);
+            } catch (Exception ignored) {
+                redisAvailable = false;
             }
+            redisAvailable &= releaseLock(lockKey, lockToken);
+
+            return redisAvailable
+                    ? DayCacheResult.available(slots)
+                    : DayCacheResult.loadedWithRedisFailure(slots);
         }
 
-        for (int attempt = 0; attempt < 4; attempt++) {
+        for (int attempt = 0; attempt < 2; attempt++) {
             try {
-                Thread.sleep(50L * (attempt + 1));
+                Thread.sleep(attempt == 0 ? 25L : 50L);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 break;
             }
             String cached = redisTemplate.opsForValue().get(dataKey);
             if (cached != null) {
-                return deserialize(cached);
+                List<AvailableSlotResponse> slots;
+                try {
+                    slots = deserialize(cached);
+                } catch (Exception exception) {
+                    return deleteCorruptEntry(dataKey)
+                            ? DayCacheResult.fallback()
+                            : DayCacheResult.redisFailure();
+                }
+                if (version.equals(getVersion(day))) {
+                    return DayCacheResult.available(slots);
+                }
+                return DayCacheResult.fallback();
             }
         }
-        return loadFromMySql(day);
-    }
-
-    private List<AvailableSlotResponse> loadFromMySql(LocalDate day) {
-        return slotRepository.findAvailableSlotDtos(
-                day.atStartOfDay(),
-                day.plusDays(1).atStartOfDay()
-        );
+        return DayCacheResult.fallback();
     }
 
     private String getVersion(LocalDate day) {
@@ -121,11 +150,23 @@ public class SlotDayCache {
         return objectMapper.readValue(json, SLOT_LIST_TYPE);
     }
 
-    private void releaseLock(String lockKey, String token) {
+    private boolean releaseLock(String lockKey, String token) {
         try {
             redisTemplate.execute(RELEASE_LOCK_SCRIPT, List.of(lockKey), token);
+            return true;
         } catch (Exception ignored) {
             // The lock expires quickly even if Redis becomes unavailable.
+            return false;
+        }
+    }
+
+    private boolean deleteCorruptEntry(String dataKey) {
+        try {
+            redisTemplate.delete(dataKey);
+            return true;
+        } catch (Exception ignored) {
+            // A corrupt entry will expire even if deletion fails.
+            return false;
         }
     }
 
@@ -143,5 +184,31 @@ public class SlotDayCache {
 
     private String lockKey(LocalDate day, String version) {
         return "slots:lock:" + day + ":v" + version;
+    }
+
+    public record DayCacheResult(
+            List<AvailableSlotResponse> slots,
+            boolean fallbackRequired,
+            boolean redisFailed
+    ) {
+        private static DayCacheResult available(
+                List<AvailableSlotResponse> slots
+        ) {
+            return new DayCacheResult(slots, false, false);
+        }
+
+        private static DayCacheResult loadedWithRedisFailure(
+                List<AvailableSlotResponse> slots
+        ) {
+            return new DayCacheResult(slots, false, true);
+        }
+
+        private static DayCacheResult fallback() {
+            return new DayCacheResult(List.of(), true, false);
+        }
+
+        private static DayCacheResult redisFailure() {
+            return new DayCacheResult(List.of(), true, true);
+        }
     }
 }

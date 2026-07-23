@@ -8,7 +8,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -22,9 +21,9 @@ import java.util.List;
 public class SlotService {
 
     private final SlotDayCache slotDayCache;
+    private final SlotQueryService slotQueryService;
     private final ObjectMapper objectMapper;
 
-    @Transactional(readOnly = true)
     public SlotPageResponse getAvailableSlots(
             LocalDateTime from,
             LocalDateTime to,
@@ -63,11 +62,25 @@ public class SlotService {
             int targetSize
     ) {
         List<AvailableSlotResponse> matches = new ArrayList<>(targetSize);
-        LocalDate day = from.toLocalDate();
+        if (!slotDayCache.isEnabled()) {
+            return slotQueryService.loadPage(
+                    from,
+                    to,
+                    cursor,
+                    targetSize
+            );
+        }
+
+        LocalDate day = cursor == null
+                ? from.toLocalDate()
+                : cursor.startTime().toLocalDate();
 
         while (day.atStartOfDay().isBefore(to) &&
                 matches.size() < targetSize) {
-            for (AvailableSlotResponse slot : slotDayCache.getDay(day)) {
+            SlotDayCache.DayCacheResult cacheResult =
+                    slotDayCache.getDay(day);
+
+            for (AvailableSlotResponse slot : cacheResult.slots()) {
                 if (matchesRangeAndCursor(slot, from, to, cursor)) {
                     matches.add(slot);
                     if (matches.size() == targetSize) {
@@ -75,9 +88,42 @@ public class SlotService {
                     }
                 }
             }
+
+            if (matches.size() == targetSize) {
+                break;
+            }
+
+            if (cacheResult.fallbackRequired()) {
+                matches.addAll(slotQueryService.loadPage(
+                        laterOf(from, day.atStartOfDay()),
+                        to,
+                        cursor,
+                        targetSize - matches.size()
+                ));
+                break;
+            }
+
             day = day.plusDays(1);
+
+            if (cacheResult.redisFailed() &&
+                    day.atStartOfDay().isBefore(to)) {
+                matches.addAll(slotQueryService.loadPage(
+                        laterOf(from, day.atStartOfDay()),
+                        to,
+                        cursor,
+                        targetSize - matches.size()
+                ));
+                break;
+            }
         }
         return matches;
+    }
+
+    private LocalDateTime laterOf(
+            LocalDateTime first,
+            LocalDateTime second
+    ) {
+        return first.isAfter(second) ? first : second;
     }
 
     private boolean matchesRangeAndCursor(
