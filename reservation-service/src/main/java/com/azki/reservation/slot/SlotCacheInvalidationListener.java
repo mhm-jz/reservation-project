@@ -9,10 +9,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class SlotCacheInvalidationListener {
 
-    private final SlotDayCache slotDayCache;
+    private final SlotDayHeadCache slotDayHeadCache;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void invalidate(SlotAvailabilityChangedEvent event) {
-        slotDayCache.incrementVersion(event.day());
+        slotDayHeadCache.incrementVersion(event.day());
     }
 }

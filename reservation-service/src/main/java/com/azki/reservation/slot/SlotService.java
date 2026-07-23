@@ -20,7 +20,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SlotService {
 
-    private final SlotDayCache slotDayCache;
+    private final SlotDayHeadCache slotDayHeadCache;
     private final SlotQueryService slotQueryService;
     private final ObjectMapper objectMapper;
 
@@ -36,7 +36,14 @@ public class SlotService {
         SlotCursor decodedCursor = decodeCursor(cursor);
         validateCursorRange(decodedCursor, from, to);
         List<AvailableSlotResponse> matchingSlots =
-                collectMatchingSlots(from, to, decodedCursor, limit + 1);
+                decodedCursor != null || !slotDayHeadCache.isEnabled()
+                        ? slotQueryService.loadPage(
+                                from,
+                                to,
+                                decodedCursor,
+                                limit + 1
+                        )
+                        : collectFirstPage(from, to, limit + 1);
 
         boolean hasNext = matchingSlots.size() > limit;
         List<AvailableSlotResponse> items = matchingSlots.subList(
@@ -55,33 +62,31 @@ public class SlotService {
         );
     }
 
-    private List<AvailableSlotResponse> collectMatchingSlots(
+    private List<AvailableSlotResponse> collectFirstPage(
             LocalDateTime from,
             LocalDateTime to,
-            SlotCursor cursor,
             int targetSize
     ) {
         List<AvailableSlotResponse> matches = new ArrayList<>(targetSize);
-        if (!slotDayCache.isEnabled()) {
-            return slotQueryService.loadPage(
-                    from,
-                    to,
-                    cursor,
-                    targetSize
-            );
-        }
-
-        LocalDate day = cursor == null
-                ? from.toLocalDate()
-                : cursor.startTime().toLocalDate();
+        LocalDate day = from.toLocalDate();
 
         while (day.atStartOfDay().isBefore(to) &&
                 matches.size() < targetSize) {
-            SlotDayCache.DayCacheResult cacheResult =
-                    slotDayCache.getDay(day);
+            SlotDayHeadCache.DayHeadCacheResult cacheResult =
+                    slotDayHeadCache.getDayHead(day);
+
+            if (cacheResult.fallbackRequired() ||
+                    cacheResult.redisFailed()) {
+                return slotQueryService.loadPage(
+                        from,
+                        to,
+                        null,
+                        targetSize
+                );
+            }
 
             for (AvailableSlotResponse slot : cacheResult.slots()) {
-                if (matchesRangeAndCursor(slot, from, to, cursor)) {
+                if (matchesRange(slot, from, to)) {
                     matches.add(slot);
                     if (matches.size() == targetSize) {
                         break;
@@ -93,53 +98,28 @@ public class SlotService {
                 break;
             }
 
-            if (cacheResult.fallbackRequired()) {
-                matches.addAll(slotQueryService.loadPage(
-                        laterOf(from, day.atStartOfDay()),
+            if (cacheResult.slots().size() ==
+                    SlotDayHeadCache.MAX_SUPPORTED_PAGE_SIZE + 1) {
+                return slotQueryService.loadPage(
+                        from,
                         to,
-                        cursor,
-                        targetSize - matches.size()
-                ));
-                break;
+                        null,
+                        targetSize
+                );
             }
 
             day = day.plusDays(1);
-
-            if (cacheResult.redisFailed() &&
-                    day.atStartOfDay().isBefore(to)) {
-                matches.addAll(slotQueryService.loadPage(
-                        laterOf(from, day.atStartOfDay()),
-                        to,
-                        cursor,
-                        targetSize - matches.size()
-                ));
-                break;
-            }
         }
         return matches;
     }
 
-    private LocalDateTime laterOf(
-            LocalDateTime first,
-            LocalDateTime second
-    ) {
-        return first.isAfter(second) ? first : second;
-    }
-
-    private boolean matchesRangeAndCursor(
+    private boolean matchesRange(
             AvailableSlotResponse slot,
             LocalDateTime from,
-            LocalDateTime to,
-            SlotCursor cursor
+            LocalDateTime to
     ) {
-        if (slot.startTime().isBefore(from) ||
-                !slot.startTime().isBefore(to)) {
-            return false;
-        }
-        return cursor == null ||
-                slot.startTime().isAfter(cursor.startTime()) ||
-                (slot.startTime().isEqual(cursor.startTime()) &&
-                        slot.id() > cursor.id());
+        return !slot.startTime().isBefore(from) &&
+                slot.startTime().isBefore(to);
     }
 
     private void validateRange(
@@ -162,7 +142,8 @@ public class SlotService {
     }
 
     private void validateLimit(int limit) {
-        if (limit < 1 || limit > 100) {
+        if (limit < 1 ||
+                limit > SlotDayHeadCache.MAX_SUPPORTED_PAGE_SIZE) {
             throw new InvalidSlotQueryException(
                     "'limit' must be between 1 and 100"
             );

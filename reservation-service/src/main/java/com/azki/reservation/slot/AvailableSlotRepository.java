@@ -64,7 +64,8 @@ public interface AvailableSlotRepository
             """)
     List<AvailableSlotResponse> findAvailableSlotDtos(
             @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to
+            @Param("to") LocalDateTime to,
+            Pageable pageable
     );
 
     @Modifying(

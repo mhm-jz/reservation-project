@@ -22,10 +22,14 @@ public class SlotQueryService {
             readOnly = true,
             propagation = Propagation.REQUIRES_NEW
     )
-    public List<AvailableSlotResponse> loadDay(LocalDate day) {
+    public List<AvailableSlotResponse> loadDayHead(
+            LocalDate day,
+            int limit
+    ) {
         return slotRepository.findAvailableSlotDtos(
                 day.atStartOfDay(),
-                day.plusDays(1).atStartOfDay()
+                day.plusDays(1).atStartOfDay(),
+                PageRequest.of(0, limit)
         );
     }
 

@@ -17,8 +17,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Component
 @RequiredArgsConstructor
-public class SlotDayCache {
+public class SlotDayHeadCache {
 
+    public static final int MAX_SUPPORTED_PAGE_SIZE = 100;
+    private static final int HEAD_SIZE = MAX_SUPPORTED_PAGE_SIZE + 1;
     private static final TypeReference<List<AvailableSlotResponse>> SLOT_LIST_TYPE =
             new TypeReference<>() {};
     private static final Duration LOCK_TTL = Duration.ofSeconds(3);
@@ -36,7 +38,7 @@ public class SlotDayCache {
     @Value("${app.slots-cache.enabled:true}")
     private boolean enabled;
 
-    public DayCacheResult getDay(LocalDate day) {
+    public DayHeadCacheResult getDayHead(LocalDate day) {
         try {
             String version = getVersion(day);
             String dataKey = dataKey(day, version);
@@ -47,19 +49,19 @@ public class SlotDayCache {
                     slots = deserialize(cached);
                 } catch (Exception exception) {
                     if (!deleteCorruptEntry(dataKey)) {
-                        return DayCacheResult.redisFailure();
+                        return DayHeadCacheResult.redisFailure();
                     }
                     return rebuildOrWait(day, version, dataKey);
                 }
 
                 if (version.equals(getVersion(day))) {
-                    return DayCacheResult.available(slots);
+                    return DayHeadCacheResult.available(slots);
                 }
-                return DayCacheResult.fallback();
+                return DayHeadCacheResult.fallback();
             }
             return rebuildOrWait(day, version, dataKey);
         } catch (Exception ignored) {
-            return DayCacheResult.redisFailure();
+            return DayHeadCacheResult.redisFailure();
         }
     }
 
@@ -79,7 +81,7 @@ public class SlotDayCache {
         }
     }
 
-    private DayCacheResult rebuildOrWait(
+    private DayHeadCacheResult rebuildOrWait(
             LocalDate day,
             String version,
             String dataKey
@@ -92,7 +94,7 @@ public class SlotDayCache {
         if (Boolean.TRUE.equals(acquired)) {
             List<AvailableSlotResponse> slots;
             try {
-                slots = slotQueryService.loadDay(day);
+                slots = slotQueryService.loadDayHead(day, HEAD_SIZE);
             } catch (RuntimeException exception) {
                 releaseLock(lockKey, lockToken);
                 throw exception;
@@ -111,8 +113,8 @@ public class SlotDayCache {
             redisAvailable &= releaseLock(lockKey, lockToken);
 
             return redisAvailable
-                    ? DayCacheResult.available(slots)
-                    : DayCacheResult.loadedWithRedisFailure(slots);
+                    ? DayHeadCacheResult.available(slots)
+                    : DayHeadCacheResult.loadedWithRedisFailure(slots);
         }
 
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -129,16 +131,16 @@ public class SlotDayCache {
                     slots = deserialize(cached);
                 } catch (Exception exception) {
                     return deleteCorruptEntry(dataKey)
-                            ? DayCacheResult.fallback()
-                            : DayCacheResult.redisFailure();
+                            ? DayHeadCacheResult.fallback()
+                            : DayHeadCacheResult.redisFailure();
                 }
                 if (version.equals(getVersion(day))) {
-                    return DayCacheResult.available(slots);
+                    return DayHeadCacheResult.available(slots);
                 }
-                return DayCacheResult.fallback();
+                return DayHeadCacheResult.fallback();
             }
         }
-        return DayCacheResult.fallback();
+        return DayHeadCacheResult.fallback();
     }
 
     private String getVersion(LocalDate day) {
@@ -179,36 +181,36 @@ public class SlotDayCache {
     }
 
     private String dataKey(LocalDate day, String version) {
-        return "slots:data:" + day + ":v" + version;
+        return "slots:head:" + day + ":v" + version;
     }
 
     private String lockKey(LocalDate day, String version) {
-        return "slots:lock:" + day + ":v" + version;
+        return "slots:head-lock:" + day + ":v" + version;
     }
 
-    public record DayCacheResult(
+    public record DayHeadCacheResult(
             List<AvailableSlotResponse> slots,
             boolean fallbackRequired,
             boolean redisFailed
     ) {
-        private static DayCacheResult available(
+        private static DayHeadCacheResult available(
                 List<AvailableSlotResponse> slots
         ) {
-            return new DayCacheResult(slots, false, false);
+            return new DayHeadCacheResult(slots, false, false);
         }
 
-        private static DayCacheResult loadedWithRedisFailure(
+        private static DayHeadCacheResult loadedWithRedisFailure(
                 List<AvailableSlotResponse> slots
         ) {
-            return new DayCacheResult(slots, false, true);
+            return new DayHeadCacheResult(slots, false, true);
         }
 
-        private static DayCacheResult fallback() {
-            return new DayCacheResult(List.of(), true, false);
+        private static DayHeadCacheResult fallback() {
+            return new DayHeadCacheResult(List.of(), true, false);
         }
 
-        private static DayCacheResult redisFailure() {
-            return new DayCacheResult(List.of(), true, true);
+        private static DayHeadCacheResult redisFailure() {
+            return new DayHeadCacheResult(List.of(), true, true);
         }
     }
 }
