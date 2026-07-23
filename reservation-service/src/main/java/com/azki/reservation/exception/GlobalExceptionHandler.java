@@ -3,6 +3,7 @@ package com.azki.reservation.exception;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -11,6 +12,21 @@ import java.time.Instant;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler({
+            InvalidSlotQueryException.class,
+            ConstraintViolationException.class
+    })
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleInvalidRequest(
+            RuntimeException exception
+    ) {
+        return new ErrorResponse(
+                "VALIDATION_ERROR",
+                exception.getMessage(),
+                Instant.now()
+        );
+    }
 
     @ExceptionHandler(UsernameAlreadyExistsException.class)
     @ResponseStatus(HttpStatus.CONFLICT)

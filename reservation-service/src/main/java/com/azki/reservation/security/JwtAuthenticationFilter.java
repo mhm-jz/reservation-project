@@ -1,5 +1,6 @@
 package com.azki.reservation.security;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -9,8 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -25,7 +24,6 @@ public class JwtAuthenticationFilter
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
 
     @Override
     protected void doFilterInternal(
@@ -62,7 +60,8 @@ public class JwtAuthenticationFilter
             HttpServletRequest request
     ) {
 
-        String username = jwtService.extractUsername(token);
+        Claims claims = jwtService.extractValidatedClaims(token);
+        String username = claims.getSubject();
 
         if (username == null ||
                 SecurityContextHolder.getContext()
@@ -70,18 +69,22 @@ public class JwtAuthenticationFilter
             return;
         }
 
-        UserDetails userDetails =
-                userDetailsService.loadUserByUsername(username);
-
-        if (!jwtService.isTokenValid(token, userDetails)) {
-            return;
+        Number userIdClaim = claims.get("userId", Number.class);
+        if (userIdClaim == null) {
+            throw new JwtException("JWT userId claim is missing");
         }
+
+        AuthenticatedUser principal = new AuthenticatedUser(
+                userIdClaim.longValue(),
+                username,
+                null
+        );
 
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
-                        userDetails,
+                        principal,
                         null,
-                        userDetails.getAuthorities()
+                        principal.getAuthorities()
                 );
 
         authentication.setDetails(

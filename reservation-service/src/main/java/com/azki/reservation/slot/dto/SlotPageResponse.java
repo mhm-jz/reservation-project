@@ -4,8 +4,7 @@ import java.util.List;
 
 public record SlotPageResponse(
         List<AvailableSlotResponse> items,
-        int page,
-        int size,
+        String nextCursor,
         boolean hasNext
 ) {
 }

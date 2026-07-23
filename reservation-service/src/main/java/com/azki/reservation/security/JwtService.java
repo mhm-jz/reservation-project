@@ -48,6 +48,10 @@ public class JwtService {
         return extractClaims(token).getSubject();
     }
 
+    public Claims extractValidatedClaims(String token) {
+        return extractClaims(token);
+    }
+
     public boolean isTokenValid(
             String token,
             UserDetails userDetails
