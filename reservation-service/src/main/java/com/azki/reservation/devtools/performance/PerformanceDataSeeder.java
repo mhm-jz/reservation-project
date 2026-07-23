@@ -1,11 +1,10 @@
-package com.azki.reservation.config;
+package com.azki.reservation.devtools.performance;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -16,7 +15,6 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
 @Component
-@Profile("perf")
 @ConditionalOnProperty(
         name = "app.performance-seeding.enabled",
         havingValue = "true"
@@ -46,12 +44,37 @@ public class PerformanceDataSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        log.info("Starting deterministic performance data seeding");
+        DatasetStatus before = inspectDataset();
+        if (before.isComplete()) {
+            log.info(
+                    "Performance dataset already exists and is complete; " +
+                            "skipping seeding ({})",
+                    before
+            );
+            return;
+        }
+
+        log.info(
+                "Performance dataset is absent or incomplete; safely resuming " +
+                        "duplicate-safe seeding ({})",
+                before
+        );
 
         seedUsers();
         seedSlots();
         seedReservations();
-        printFinalCounts();
+
+        DatasetStatus after = inspectDataset();
+        if (!after.isComplete()) {
+            throw new IllegalStateException(
+                    "Performance dataset remains incomplete after duplicate-safe " +
+                            "seeding. Existing rows may conflict with deterministic " +
+                            "performance IDs; no data was deleted or overwritten. " +
+                            after
+            );
+        }
+
+        log.info("Performance dataset seeding complete ({})", after);
     }
 
     private void seedUsers() {
@@ -175,34 +198,77 @@ public class PerformanceDataSeeder implements ApplicationRunner {
         return slotId % 10 < 3;
     }
 
-    private void printFinalCounts() {
-        Long users = count("users");
-        Long slots = count("available_slots");
-        Long reservedSlots = jdbcTemplate.queryForObject(
+    private DatasetStatus inspectDataset() {
+        long users = queryCount(
+                """
+                        select count(*)
+                        from users
+                        where id between 1 and ?
+                          and username = concat(
+                              'perf-user-',
+                              lpad(id, 5, '0')
+                          )
+                        """,
+                USER_COUNT
+        );
+        long slots = queryCount(
                 """
                         select count(*)
                         from available_slots
-                        where is_reserved = true
+                        where id between 1 and ?
+                          and created_at = ?
+                          and start_time = date_add(
+                              ?,
+                              interval mod(id - 1, ?) minute
+                          )
+                          and end_time = date_add(start_time, interval 30 minute)
                         """,
-                Long.class
+                SLOT_COUNT,
+                Timestamp.valueOf(CREATED_AT),
+                Timestamp.valueOf(SLOT_TIMELINE_START),
+                MINUTES_IN_YEAR
         );
-        Long reservations = count("reservations");
+        long reservations = queryCount(
+                """
+                        select count(*)
+                        from reservations r
+                        join users u on u.id = r.user_id
+                        where r.id between 1 and ?
+                          and mod(r.id, 10) < 3
+                          and r.slot_id = r.id
+                          and r.created_at = ?
+                          and u.id = mod(r.slot_id - 1, ?) + 1
+                          and u.username = concat(
+                              'perf-user-',
+                              lpad(u.id, 5, '0')
+                          )
+                        """,
+                SLOT_COUNT,
+                Timestamp.valueOf(CREATED_AT),
+                USER_COUNT
+        );
+        long reservedSlots = queryCount(
+                """
+                        select count(*)
+                        from available_slots s
+                        join reservations r
+                          on r.id = s.id
+                         and r.slot_id = s.id
+                         and r.created_at = ?
+                        where s.id between 1 and ?
+                          and mod(s.id, 10) < 3
+                          and s.is_reserved = true
+                        """,
+                Timestamp.valueOf(CREATED_AT),
+                SLOT_COUNT
+        );
 
-        log.info(
-                "Performance data counts: users={}, available_slots={}, " +
-                        "reserved_slots={}, reservations={}",
-                users,
-                slots,
-                reservedSlots,
-                reservations
-        );
+        return new DatasetStatus(users, slots, reservations, reservedSlots);
     }
 
-    private Long count(String tableName) {
-        return jdbcTemplate.queryForObject(
-                "select count(*) from " + tableName,
-                Long.class
-        );
+    private long queryCount(String sql, Object... arguments) {
+        Long result = jdbcTemplate.queryForObject(sql, Long.class, arguments);
+        return result == null ? 0L : result;
     }
 
     @FunctionalInterface
@@ -212,5 +278,20 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                 PreparedStatement statement,
                 int itemNumber
         ) throws SQLException;
+    }
+
+    private record DatasetStatus(
+            long users,
+            long slots,
+            long reservations,
+            long reservedSlots
+    ) {
+
+        private boolean isComplete() {
+            return users == USER_COUNT
+                    && slots == SLOT_COUNT
+                    && reservations == RESERVED_SLOT_COUNT
+                    && reservedSlots == RESERVED_SLOT_COUNT;
+        }
     }
 }

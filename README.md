@@ -1,23 +1,28 @@
 # Reservation Platform
 
-## Performance-test database
+## Shared development and performance infrastructure
 
-Start the isolated MySQL service:
-
-```shell
-docker compose up -d reservation-mysql-perf
-```
-
-After MySQL is ready, run the application once with the `perf` profile and
-explicit seeding flag:
+Start the normal persistent MySQL and Redis services:
 
 ```shell
-mvn -pl reservation-service spring-boot:run \
-  -Dspring-boot.run.profiles=perf \
-  -Dspring-boot.run.arguments=--app.performance-seeding.enabled=true
+docker compose up -d reservation-mysql reservation-redis
 ```
 
-The performance database uses port `3307` and the `reservation_perf` schema, so
-the normal development database on port `3306` is not modified. The seeder uses
-deterministic, idempotent JDBC batches and logs final users, slots, reserved
-slots, and reservations counts. Stop the application after seeding completes.
+Performance seeding is disabled during normal startup. For first-time or repair
+seeding, enable it explicitly:
+
+```shell
+APP_PERFORMANCE_SEEDING_ENABLED=true \
+./mvnw -pl reservation-service spring-boot:run
+```
+
+The seeder uses deterministic, duplicate-safe JDBC batches and skips a complete
+dataset. Normal subsequent startup needs no performance profile or seeding
+variable:
+
+```shell
+./mvnw -pl reservation-service spring-boot:run
+```
+
+See [performance/README.md](performance/README.md) for the full workflow and
+shared-data cleanup safeguards.

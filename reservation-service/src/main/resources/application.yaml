@@ -3,7 +3,7 @@ spring:
     name: reservation-service
 
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/reservation_db}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/reservation_db?rewriteBatchedStatements=true}
     username: ${DB_USERNAME:reservation_user}
     password: ${DB_PASSWORD:reservation_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -17,6 +17,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        jdbc:
+          batch_size: 5000
+        order_inserts: true
+        order_updates: true
 
   data:
     redis:
@@ -28,6 +32,8 @@ spring:
 app:
   slots-cache:
     enabled: ${SLOTS_CACHE_ENABLED:true}
+  performance-seeding:
+    enabled: ${APP_PERFORMANCE_SEEDING_ENABLED:false}
 
 server:
   port: 8080

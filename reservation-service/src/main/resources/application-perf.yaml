@@ -1,9 +1,0 @@
-spring:
-  datasource:
-    url: ${PERF_DB_URL:jdbc:mysql://127.0.0.1:3307/reservation_perf?rewriteBatchedStatements=true}
-    username: ${PERF_DB_USERNAME:reservation_perf_user}
-    password: ${PERF_DB_PASSWORD:reservation_perf_password}
-
-app:
-  performance-seeding:
-    enabled: false
