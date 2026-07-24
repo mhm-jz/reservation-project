@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Service
@@ -69,23 +71,24 @@ public class ReservationService {
             Long reservationId,
             Long userId
     ) {
-        Long slotId = loadOwnedReservationSlotId(
+        OwnedReservationSlot ownedSlot = loadOwnedReservationSlot(
                 reservationId,
                 userId
         );
         deleteOwnedReservation(reservationId, userId);
-        releaseSlot(slotId);
+        releaseSlot(ownedSlot.slotId());
 
-        AvailableSlotEntity slot = loadSlot(slotId);
-        publishSlotAvailabilityChanged(slot);
+        publishSlotAvailabilityChanged(
+                ownedSlot.startTime().toLocalDate()
+        );
     }
 
-    private Long loadOwnedReservationSlotId(
+    private OwnedReservationSlot loadOwnedReservationSlot(
             Long reservationId,
             Long userId
     ) {
         return reservationRepository
-                .findSlotIdByReservationIdAndUserId(
+                .findOwnedSlotByReservationIdAndUserId(
                         reservationId,
                         userId
                 )
@@ -130,10 +133,14 @@ public class ReservationService {
     private void publishSlotAvailabilityChanged(
             AvailableSlotEntity slot
     ) {
+        publishSlotAvailabilityChanged(
+                slot.getStartTime().toLocalDate()
+        );
+    }
+
+    private void publishSlotAvailabilityChanged(LocalDate day) {
         eventPublisher.publishEvent(
-                new SlotAvailabilityChangedEvent(
-                        slot.getStartTime().toLocalDate()
-                )
+                new SlotAvailabilityChangedEvent(day)
         );
     }
 }

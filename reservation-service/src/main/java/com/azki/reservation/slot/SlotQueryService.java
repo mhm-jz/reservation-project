@@ -2,7 +2,6 @@ package com.azki.reservation.slot;
 
 import com.azki.reservation.slot.dto.AvailableSlotResponse;
 import com.azki.reservation.slot.dto.SlotCursor;
-import com.azki.reservation.slot.mapper.SlotMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,6 @@ import java.util.List;
 public class SlotQueryService {
 
     private final AvailableSlotRepository slotRepository;
-    private final SlotMapper slotMapper;
 
     @Transactional(
             readOnly = true,
@@ -28,7 +26,7 @@ public class SlotQueryService {
             LocalDate day,
             int limit
     ) {
-        return slotRepository.findAvailableSlotDtos(
+        return slotRepository.findAvailableSlots(
                 day.atStartOfDay(),
                 day.plusDays(1).atStartOfDay(),
                 PageRequest.of(0, limit)
@@ -46,7 +44,7 @@ public class SlotQueryService {
             int limit
     ) {
         PageRequest pageRequest = PageRequest.of(0, limit);
-        List<AvailableSlotEntity> slots = cursor == null
+        return cursor == null
                 ? slotRepository.findAvailableSlots(from, to, pageRequest)
                 : slotRepository.findAvailableSlotsAfterCursor(
                         from,
@@ -55,7 +53,5 @@ public class SlotQueryService {
                         cursor.id(),
                         pageRequest
                 );
-
-        return slotMapper.toResponses(slots);
     }
 }

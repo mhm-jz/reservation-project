@@ -13,12 +13,15 @@ public interface ReservationRepository
     boolean existsBySlot_Id(Long slotId);
 
     @Query("""
-            select reservation.slot.id
+            select new com.azki.reservation.reservation.OwnedReservationSlot(
+                    reservation.slot.id,
+                    reservation.slot.startTime
+            )
             from ReservationEntity reservation
             where reservation.id = :reservationId
               and reservation.user.id = :userId
             """)
-    Optional<Long> findSlotIdByReservationIdAndUserId(
+    Optional<OwnedReservationSlot> findOwnedSlotByReservationIdAndUserId(
             @Param("reservationId") Long reservationId,
             @Param("userId") Long userId
     );
