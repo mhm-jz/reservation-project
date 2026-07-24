@@ -35,16 +35,36 @@ public class SlotService {
 
         SlotCursor decodedCursor = decodeCursor(cursor);
         validateCursorRange(decodedCursor, from, to);
-        List<AvailableSlotResponse> matchingSlots =
-                decodedCursor != null || !slotDayHeadCache.isEnabled()
-                        ? slotQueryService.loadPage(
-                                from,
-                                to,
-                                decodedCursor,
-                                limit + 1
-                        )
-                        : collectFirstPage(from, to, limit + 1);
+        List<AvailableSlotResponse> matchingSlots = loadMatchingSlots(
+                from,
+                to,
+                decodedCursor,
+                limit + 1
+        );
 
+        return createPage(matchingSlots, limit);
+    }
+
+    private List<AvailableSlotResponse> loadMatchingSlots(
+            LocalDateTime from,
+            LocalDateTime to,
+            SlotCursor cursor,
+            int targetSize
+    ) {
+        return cursor != null || !slotDayHeadCache.isEnabled()
+                ? slotQueryService.loadPage(
+                        from,
+                        to,
+                        cursor,
+                        targetSize
+                )
+                : collectFirstPage(from, to, targetSize);
+    }
+
+    private SlotPageResponse createPage(
+            List<AvailableSlotResponse> matchingSlots,
+            int limit
+    ) {
         boolean hasNext = matchingSlots.size() > limit;
         List<AvailableSlotResponse> items = matchingSlots.subList(
                 0,

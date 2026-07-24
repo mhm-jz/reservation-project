@@ -1,6 +1,7 @@
 package com.azki.reservation.security;
 
 import com.azki.reservation.exception.ErrorResponse;
+import com.azki.reservation.exception.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,13 +29,14 @@ public class RestAuthenticationEntryPoint
             AuthenticationException authException
     ) throws IOException, ServletException {
 
+        ErrorCode errorCode = ErrorCode.UNAUTHORIZED;
         ErrorResponse error = new ErrorResponse(
-                "UNAUTHORIZED",
-                "Authentication is required",
+                errorCode.name(),
+                errorCode.getDefaultMessage(),
                 Instant.now()
         );
 
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setStatus(errorCode.getHttpStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
         objectMapper.writeValue(

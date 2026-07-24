@@ -1,9 +1,9 @@
 package com.azki.reservation.exception;
 
-public class EmailAlreadyExistsException
-        extends RuntimeException {
+public final class EmailAlreadyExistsException
+        extends BusinessException {
 
-    public EmailAlreadyExistsException(String email) {
-        super("Email already exists: " + email);
+    public EmailAlreadyExistsException() {
+        super(ErrorCode.EMAIL_ALREADY_EXISTS);
     }
 }

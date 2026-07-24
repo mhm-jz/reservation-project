@@ -1,6 +1,7 @@
 package com.azki.reservation.config;
 
 import com.azki.reservation.exception.ErrorResponse;
+import com.azki.reservation.exception.ErrorCode;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.examples.Example;
@@ -60,12 +61,12 @@ public class OpenApiConfig {
                                 orderedExamples(
                                         "invalidUsername",
                                         errorExample(
-                                                "VALIDATION_ERROR",
+                                                ErrorCode.VALIDATION_ERROR,
                                                 "username: size must be between 3 and 100"
                                         ),
                                         "invalidEmail",
                                         errorExample(
-                                                "VALIDATION_ERROR",
+                                                ErrorCode.VALIDATION_ERROR,
                                                 "email: must be a well-formed email address"
                                         )
                                 )
@@ -78,7 +79,7 @@ public class OpenApiConfig {
                                 Map.of(
                                         "validationError",
                                         errorExample(
-                                                "VALIDATION_ERROR",
+                                                ErrorCode.VALIDATION_ERROR,
                                                 "password: must not be blank"
                                         )
                                 )
@@ -91,7 +92,7 @@ public class OpenApiConfig {
                                 Map.of(
                                         "validationError",
                                         errorExample(
-                                                "VALIDATION_ERROR",
+                                                ErrorCode.VALIDATION_ERROR,
                                                 "slotId: must be greater than 0"
                                         )
                                 )
@@ -104,17 +105,17 @@ public class OpenApiConfig {
                                 orderedExamples(
                                         "invalidRange",
                                         errorExample(
-                                                "VALIDATION_ERROR",
+                                                ErrorCode.VALIDATION_ERROR,
                                                 "'to' must be after 'from'"
                                         ),
                                         "invalidCursor",
                                         errorExample(
-                                                "VALIDATION_ERROR",
+                                                ErrorCode.VALIDATION_ERROR,
                                                 "Cursor is invalid"
                                         ),
                                         "invalidLimit",
                                         errorExample(
-                                                "VALIDATION_ERROR",
+                                                ErrorCode.VALIDATION_ERROR,
                                                 "'limit' must be between 1 and 100"
                                         )
                                 )
@@ -126,10 +127,7 @@ public class OpenApiConfig {
                                 "Authentication is required",
                                 Map.of(
                                         "unauthorized",
-                                        errorExample(
-                                                "UNAUTHORIZED",
-                                                "Authentication is required"
-                                        )
+                                        errorExample(ErrorCode.UNAUTHORIZED)
                                 )
                         )
                 )
@@ -140,8 +138,7 @@ public class OpenApiConfig {
                                 Map.of(
                                         "invalidCredentials",
                                         errorExample(
-                                                "INVALID_CREDENTIALS",
-                                                "Username or password is incorrect"
+                                                ErrorCode.INVALID_CREDENTIALS
                                         )
                                 )
                         )
@@ -153,7 +150,7 @@ public class OpenApiConfig {
                                 Map.of(
                                         "slotNotFound",
                                         errorExample(
-                                                "SLOT_NOT_FOUND",
+                                                ErrorCode.SLOT_NOT_FOUND,
                                                 "Slot not found: 42"
                                         )
                                 )
@@ -166,12 +163,12 @@ public class OpenApiConfig {
                                 orderedExamples(
                                         "reservationNotFound",
                                         errorExample(
-                                                "RESERVATION_NOT_FOUND",
+                                                ErrorCode.RESERVATION_NOT_FOUND,
                                                 "Reservation not found: 42"
                                         ),
                                         "slotNotFound",
                                         errorExample(
-                                                "SLOT_NOT_FOUND",
+                                                ErrorCode.SLOT_NOT_FOUND,
                                                 "Slot not found: 42"
                                         )
                                 )
@@ -184,13 +181,11 @@ public class OpenApiConfig {
                                 orderedExamples(
                                         "usernameAlreadyExists",
                                         errorExample(
-                                                "USERNAME_ALREADY_EXISTS",
-                                                "Username already exists: alice"
+                                                ErrorCode.USERNAME_ALREADY_EXISTS
                                         ),
                                         "emailAlreadyExists",
                                         errorExample(
-                                                "EMAIL_ALREADY_EXISTS",
-                                                "Email already exists: alice@example.com"
+                                                ErrorCode.EMAIL_ALREADY_EXISTS
                                         )
                                 )
                         )
@@ -202,12 +197,12 @@ public class OpenApiConfig {
                                 orderedExamples(
                                         "slotAlreadyReserved",
                                         errorExample(
-                                                "SLOT_ALREADY_RESERVED",
+                                                ErrorCode.SLOT_ALREADY_RESERVED,
                                                 "Slot is already reserved: 42"
                                         ),
                                         "slotUnavailable",
                                         errorExample(
-                                                "SLOT_UNAVAILABLE",
+                                                ErrorCode.SLOT_UNAVAILABLE,
                                                 "Slot is no longer available: 42"
                                         )
                                 )
@@ -220,8 +215,7 @@ public class OpenApiConfig {
                                 Map.of(
                                         "reservationStateError",
                                         errorExample(
-                                                "RESERVATION_STATE_ERROR",
-                                                "Reservation could not be cancelled"
+                                                ErrorCode.RESERVATION_STATE_ERROR
                                         )
                                 )
                         )
@@ -292,14 +286,21 @@ public class OpenApiConfig {
     }
 
     private Example errorExample(
-            String code,
+            ErrorCode errorCode,
             String message
     ) {
         Map<String, String> example = new LinkedHashMap<>();
-        example.put("code", code);
+        example.put("code", errorCode.name());
         example.put("message", message);
         example.put("timestamp", "2026-07-24T10:00:00Z");
         return new Example().value(example);
+    }
+
+    private Example errorExample(ErrorCode errorCode) {
+        return errorExample(
+                errorCode,
+                errorCode.getDefaultMessage()
+        );
     }
 
     private Map<String, Example> orderedExamples(

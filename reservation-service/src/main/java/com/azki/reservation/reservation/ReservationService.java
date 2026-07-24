@@ -30,57 +30,39 @@ public class ReservationService {
             Long userId
     ) {
         LocalDateTime now = LocalDateTime.now();
+        reserveSlotOrThrow(slotId, now);
 
-        int updatedRows = slotRepository.reserveIfAvailable(
-                slotId,
-                now
-        );
-
-        if (updatedRows == 0) {
-            throwReservationError(slotId, now);
-        }
-
-        AvailableSlotEntity slot = slotRepository
-                .findById(slotId)
-                .orElseThrow(() ->
-                        new SlotNotFoundException(slotId)
-                );
-
-        UserEntity user = userRepository.getReferenceById(userId);
-
+        AvailableSlotEntity slot = loadSlot(slotId);
         ReservationEntity reservation =
-                new ReservationEntity(user, slot);
-
+                createReservation(userId, slot);
         ReservationEntity savedReservation =
                 reservationRepository.save(reservation);
 
-        eventPublisher.publishEvent(
-                new SlotAvailabilityChangedEvent(
-                        slot.getStartTime().toLocalDate()
-                )
-        );
-
+        publishSlotAvailabilityChanged(slot);
         return reservationMapper.toResponse(savedReservation);
     }
 
-    private void throwReservationError(
+    private void reserveSlotOrThrow(
             Long slotId,
             LocalDateTime now
     ) {
-        AvailableSlotEntity slot = slotRepository
-                .findById(slotId)
-                .orElseThrow(() ->
-                        new SlotNotFoundException(slotId)
-                );
+        int updatedRows = slotRepository.reserveIfAvailable(slotId, now);
+        if (updatedRows == 0) {
+            throwSlotReservationError(slotId, now);
+        }
+    }
 
+    private void throwSlotReservationError(
+            Long slotId,
+            LocalDateTime now
+    ) {
+        AvailableSlotEntity slot = loadSlot(slotId);
         if (slot.isReserved()) {
             throw new SlotAlreadyReservedException(slotId);
         }
-
         if (slot.getStartTime().isBefore(now)) {
             throw new SlotUnavailableException(slotId);
         }
-
         throw new SlotUnavailableException(slotId);
     }
 
@@ -89,42 +71,67 @@ public class ReservationService {
             Long reservationId,
             Long userId
     ) {
-        Long slotId = reservationRepository
+        Long slotId = loadOwnedReservationSlotId(
+                reservationId,
+                userId
+        );
+        deleteOwnedReservation(reservationId, userId);
+        releaseSlot(slotId);
+
+        AvailableSlotEntity slot = loadSlot(slotId);
+        publishSlotAvailabilityChanged(slot);
+    }
+
+    private Long loadOwnedReservationSlotId(
+            Long reservationId,
+            Long userId
+    ) {
+        return reservationRepository
                 .findSlotIdByReservationIdAndUserId(
                         reservationId,
                         userId
                 )
                 .orElseThrow(() ->
-                        new ReservationNotFoundException(
-                                reservationId
-                        )
+                        new ReservationNotFoundException(reservationId)
                 );
+    }
 
+    private void deleteOwnedReservation(
+            Long reservationId,
+            Long userId
+    ) {
         int deletedRows = reservationRepository
-                .deleteByReservationIdAndUserId(
-                        reservationId,
-                        userId
-                );
-
+                .deleteByReservationIdAndUserId(reservationId, userId);
         if (deletedRows == 0) {
-            throw new ReservationNotFoundException(
-                    reservationId
-            );
+            throw new ReservationNotFoundException(reservationId);
         }
+    }
 
+    private void releaseSlot(Long slotId) {
         int releasedRows = slotRepository
                 .releaseReservedSlot(slotId);
-
         if (releasedRows == 0) {
-            throw new ReservationStateException(
-                    reservationId
-            );
+            throw new ReservationStateException();
         }
+    }
 
-        AvailableSlotEntity slot = slotRepository
+    private AvailableSlotEntity loadSlot(Long slotId) {
+        return slotRepository
                 .findById(slotId)
                 .orElseThrow(() -> new SlotNotFoundException(slotId));
+    }
 
+    private ReservationEntity createReservation(
+            Long userId,
+            AvailableSlotEntity slot
+    ) {
+        UserEntity user = userRepository.getReferenceById(userId);
+        return new ReservationEntity(user, slot);
+    }
+
+    private void publishSlotAvailabilityChanged(
+            AvailableSlotEntity slot
+    ) {
         eventPublisher.publishEvent(
                 new SlotAvailabilityChangedEvent(
                         slot.getStartTime().toLocalDate()

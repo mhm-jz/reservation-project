@@ -1,11 +1,12 @@
 package com.azki.reservation.exception;
 
-import org.springframework.http.HttpStatus;
+import com.azki.reservation.user.UserEntity;
+import jakarta.validation.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import jakarta.validation.ConstraintViolationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.Instant;
@@ -13,94 +14,60 @@ import java.time.Instant;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler({
-            InvalidSlotQueryException.class,
-            ConstraintViolationException.class
-    })
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleInvalidRequest(
-            RuntimeException exception
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessException(
+            BusinessException exception
     ) {
-        return new ErrorResponse(
-                "VALIDATION_ERROR",
-                exception.getMessage(),
-                Instant.now()
+        return errorResponse(
+                exception.getErrorCode(),
+                exception.getMessage()
         );
     }
 
-    @ExceptionHandler(UsernameAlreadyExistsException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse handleUsernameAlreadyExists(
-            UsernameAlreadyExistsException exception
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException exception
     ) {
-        return new ErrorResponse(
-                "USERNAME_ALREADY_EXISTS",
-                exception.getMessage(),
-                Instant.now()
-        );
-    }
+        if (containsConstraint(
+                exception,
+                UserEntity.USERNAME_UNIQUE_CONSTRAINT
+        )) {
+            return handleBusinessException(
+                    new UsernameAlreadyExistsException()
+            );
+        }
+        if (containsConstraint(
+                exception,
+                UserEntity.EMAIL_UNIQUE_CONSTRAINT
+        )) {
+            return handleBusinessException(
+                    new EmailAlreadyExistsException()
+            );
+        }
 
-    @ExceptionHandler(EmailAlreadyExistsException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse handleEmailAlreadyExists(
-            EmailAlreadyExistsException exception
-    ) {
-        return new ErrorResponse(
-                "EMAIL_ALREADY_EXISTS",
-                exception.getMessage(),
-                Instant.now()
-        );
+        throw exception;
     }
 
     @ExceptionHandler(BadCredentialsException.class)
-    @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public ErrorResponse handleBadCredentials() {
-        return new ErrorResponse(
-                "INVALID_CREDENTIALS",
-                "Username or password is incorrect",
-                Instant.now()
+    public ResponseEntity<ErrorResponse> handleBadCredentials() {
+        return errorResponse(
+                ErrorCode.INVALID_CREDENTIALS,
+                ErrorCode.INVALID_CREDENTIALS.getDefaultMessage()
         );
     }
 
-    @ExceptionHandler(SlotNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public ErrorResponse handleSlotNotFound(
-            SlotNotFoundException exception
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(
+            ConstraintViolationException exception
     ) {
-        return new ErrorResponse(
-                "SLOT_NOT_FOUND",
-                exception.getMessage(),
-                Instant.now()
-        );
-    }
-
-    @ExceptionHandler(SlotAlreadyReservedException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse handleSlotAlreadyReserved(
-            SlotAlreadyReservedException exception
-    ) {
-        return new ErrorResponse(
-                "SLOT_ALREADY_RESERVED",
-                exception.getMessage(),
-                Instant.now()
-        );
-    }
-
-    @ExceptionHandler(SlotUnavailableException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public ErrorResponse handleSlotUnavailable(
-            SlotUnavailableException exception
-    ) {
-        return new ErrorResponse(
-                "SLOT_UNAVAILABLE",
-                exception.getMessage(),
-                Instant.now()
+        return errorResponse(
+                ErrorCode.VALIDATION_ERROR,
+                exception.getMessage()
         );
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ErrorResponse handleValidationException(
+    public ResponseEntity<ErrorResponse> handleValidationException(
             MethodArgumentNotValidException exception
     ) {
         String message = exception
@@ -114,36 +81,37 @@ public class GlobalExceptionHandler {
                 )
                 .orElse("Request validation failed");
 
-        return new ErrorResponse(
-                "VALIDATION_ERROR",
-                message,
-                Instant.now()
+        return errorResponse(
+                ErrorCode.VALIDATION_ERROR,
+                message
         );
     }
 
-
-    @ExceptionHandler(ReservationNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    public ErrorResponse handleReservationNotFound(
-            ReservationNotFoundException exception
+    private ResponseEntity<ErrorResponse> errorResponse(
+            ErrorCode errorCode,
+            String message
     ) {
-        return new ErrorResponse(
-                "RESERVATION_NOT_FOUND",
-                exception.getMessage(),
-                Instant.now()
-        );
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
+                .body(new ErrorResponse(
+                        errorCode.name(),
+                        message,
+                        Instant.now()
+                ));
     }
 
-
-    @ExceptionHandler(ReservationStateException.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse handleReservationState(
-            ReservationStateException exception
+    private boolean containsConstraint(
+            Throwable exception,
+            String constraintName
     ) {
-        return new ErrorResponse(
-                "RESERVATION_STATE_ERROR",
-                "Reservation could not be cancelled",
-                Instant.now()
-        );
+        Throwable current = exception;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.contains(constraintName)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

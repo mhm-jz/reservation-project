@@ -12,11 +12,11 @@ import java.time.LocalDateTime;
         name = "users",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_users_username",
+                        name = UserEntity.USERNAME_UNIQUE_CONSTRAINT,
                         columnNames = "username"
                 ),
                 @UniqueConstraint(
-                        name = "uk_users_email",
+                        name = UserEntity.EMAIL_UNIQUE_CONSTRAINT,
                         columnNames = "email"
                 )
         }
@@ -24,6 +24,11 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserEntity {
+
+    public static final String USERNAME_UNIQUE_CONSTRAINT =
+            "uk_users_username";
+    public static final String EMAIL_UNIQUE_CONSTRAINT =
+            "uk_users_email";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

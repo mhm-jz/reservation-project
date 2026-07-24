@@ -1,9 +1,9 @@
 package com.azki.reservation.exception;
 
-public class UsernameAlreadyExistsException
-        extends RuntimeException {
+public final class UsernameAlreadyExistsException
+        extends BusinessException {
 
-    public UsernameAlreadyExistsException(String username) {
-        super("Username already exists: " + username);
+    public UsernameAlreadyExistsException() {
+        super(ErrorCode.USERNAME_ALREADY_EXISTS);
     }
 }

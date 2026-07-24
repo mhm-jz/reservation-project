@@ -1,9 +1,12 @@
 package com.azki.reservation.exception;
 
-public class SlotUnavailableException
-        extends RuntimeException {
+public final class SlotUnavailableException
+        extends BusinessException {
 
     public SlotUnavailableException(Long slotId) {
-        super("Slot is no longer available: " + slotId);
+        super(
+                ErrorCode.SLOT_UNAVAILABLE,
+                "Slot is no longer available: " + slotId
+        );
     }
 }

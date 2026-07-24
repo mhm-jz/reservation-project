@@ -1,8 +1,12 @@
 package com.azki.reservation.exception;
 
-public class SlotNotFoundException extends RuntimeException {
+public final class SlotNotFoundException
+        extends BusinessException {
 
     public SlotNotFoundException(Long slotId) {
-        super("Slot not found: " + slotId);
+        super(
+                ErrorCode.SLOT_NOT_FOUND,
+                "Slot not found: " + slotId
+        );
     }
 }

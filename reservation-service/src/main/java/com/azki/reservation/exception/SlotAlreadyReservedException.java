@@ -1,9 +1,12 @@
 package com.azki.reservation.exception;
 
-public class SlotAlreadyReservedException
-        extends RuntimeException {
+public final class SlotAlreadyReservedException
+        extends BusinessException {
 
     public SlotAlreadyReservedException(Long slotId) {
-        super("Slot is already reserved: " + slotId);
+        super(
+                ErrorCode.SLOT_ALREADY_RESERVED,
+                "Slot is already reserved: " + slotId
+        );
     }
 }

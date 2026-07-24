@@ -34,32 +34,15 @@ public class AuthService {
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
+        String username = normalizeUsername(request.username());
+        String email = normalizeEmail(request.email());
+        validateUserUniqueness(username, email);
 
-        String username = request.username().trim();
-
-        String email = request.email()
-                .trim()
-                .toLowerCase(Locale.ROOT);
-
-
-        if (userRepository.existsByUsername(username)) {
-            throw new UsernameAlreadyExistsException(username);
-        }
-
-        if (userRepository.existsByEmail(email)) {
-            throw new EmailAlreadyExistsException(email);
-        }
-
-        String passwordHash = passwordEncoder.encode(
-                request.password()
-        );
-
-        UserEntity user = new UserEntity(
+        UserEntity user = createUser(
                 username,
                 email,
-                passwordHash
+                request.password()
         );
-
         UserEntity savedUser = userRepository.save(user);
 
         return userMapper.toUserResponse(savedUser);
@@ -67,13 +50,7 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public CurrentUserResponse currentUser(Long userId) {
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new IllegalStateException(
-                                "Authenticated user no longer exists"
-                        )
-                );
-
+        UserEntity user = loadUser(userId);
         return userMapper.toCurrentUserResponse(user);
     }
 
@@ -82,7 +59,7 @@ public class AuthService {
         Authentication authentication =
                 authenticationManager.authenticate(
                         new UsernamePasswordAuthenticationToken(
-                                request.username().trim(),
+                                normalizeUsername(request.username()),
                                 request.password()
                         )
                 );
@@ -98,5 +75,43 @@ public class AuthService {
                 "Bearer",
                 jwtService.getExpirationSeconds()
         );
+    }
+
+    private String normalizeUsername(String username) {
+        return username.trim();
+    }
+
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void validateUserUniqueness(
+            String username,
+            String email
+    ) {
+        if (userRepository.existsByUsername(username)) {
+            throw new UsernameAlreadyExistsException();
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException();
+        }
+    }
+
+    private UserEntity createUser(
+            String username,
+            String email,
+            String rawPassword
+    ) {
+        String passwordHash = passwordEncoder.encode(rawPassword);
+        return new UserEntity(username, email, passwordHash);
+    }
+
+    private UserEntity loadUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Authenticated user no longer exists"
+                        )
+                );
     }
 }

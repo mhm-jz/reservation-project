@@ -1,11 +1,9 @@
 package com.azki.reservation.exception;
 
-public class ReservationStateException extends RuntimeException {
+public final class ReservationStateException
+        extends BusinessException {
 
-    public ReservationStateException(Long reservationId) {
-        super(
-                "Reservation state is inconsistent: "
-                        + reservationId
-        );
+    public ReservationStateException() {
+        super(ErrorCode.RESERVATION_STATE_ERROR);
     }
 }

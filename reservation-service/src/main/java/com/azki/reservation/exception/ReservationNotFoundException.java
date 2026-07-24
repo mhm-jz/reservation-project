@@ -1,8 +1,12 @@
 package com.azki.reservation.exception;
 
-public class ReservationNotFoundException extends RuntimeException {
+public final class ReservationNotFoundException
+        extends BusinessException {
 
     public ReservationNotFoundException(Long reservationId) {
-        super("Reservation not found: " + reservationId);
+        super(
+                ErrorCode.RESERVATION_NOT_FOUND,
+                "Reservation not found: " + reservationId
+        );
     }
 }
