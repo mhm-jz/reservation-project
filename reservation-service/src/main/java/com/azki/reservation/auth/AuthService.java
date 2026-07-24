@@ -5,6 +5,7 @@ import com.azki.reservation.auth.dto.CurrentUserResponse;
 import com.azki.reservation.auth.dto.LoginRequest;
 import com.azki.reservation.auth.dto.RegisterRequest;
 import com.azki.reservation.auth.dto.UserResponse;
+import com.azki.reservation.auth.mapper.UserMapper;
 import com.azki.reservation.exception.EmailAlreadyExistsException;
 import com.azki.reservation.exception.UsernameAlreadyExistsException;
 import com.azki.reservation.security.AuthenticatedUser;
@@ -29,6 +30,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final UserMapper userMapper;
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
@@ -60,11 +62,7 @@ public class AuthService {
 
         UserEntity savedUser = userRepository.save(user);
 
-        return new UserResponse(
-                savedUser.getId(),
-                savedUser.getUsername(),
-                savedUser.getEmail()
-        );
+        return userMapper.toUserResponse(savedUser);
     }
 
     @Transactional(readOnly = true)
@@ -76,11 +74,7 @@ public class AuthService {
                         )
                 );
 
-        return new CurrentUserResponse(
-                user.getId(),
-                user.getUsername(),
-                user.getEmail()
-        );
+        return userMapper.toCurrentUserResponse(user);
     }
 
     public AuthResponse login(LoginRequest request) {

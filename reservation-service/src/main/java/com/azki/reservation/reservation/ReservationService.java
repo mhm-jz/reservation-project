@@ -1,6 +1,7 @@
 package com.azki.reservation.reservation;
 
 import com.azki.reservation.exception.*;
+import com.azki.reservation.reservation.mapper.ReservationMapper;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import com.azki.reservation.slot.AvailableSlotEntity;
 import com.azki.reservation.slot.AvailableSlotRepository;
@@ -21,6 +22,7 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final ReservationMapper reservationMapper;
 
     @Transactional
     public ReservationResponse createReservation(
@@ -58,7 +60,7 @@ public class ReservationService {
                 )
         );
 
-        return toResponse(savedReservation);
+        return reservationMapper.toResponse(savedReservation);
     }
 
     private void throwReservationError(
@@ -81,23 +83,6 @@ public class ReservationService {
 
         throw new SlotUnavailableException(slotId);
     }
-
-    private ReservationResponse toResponse(
-            ReservationEntity reservation
-    ) {
-        AvailableSlotEntity slot = reservation.getSlot();
-
-        return new ReservationResponse(
-                reservation.getId(),
-                slot.getId(),
-                reservation.getUser().getId(),
-                slot.getStartTime(),
-                slot.getEndTime(),
-                reservation.getCreatedAt()
-        );
-    }
-
-
 
     @Transactional
     public void cancelReservation(

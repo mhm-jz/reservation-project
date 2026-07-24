@@ -2,6 +2,7 @@ package com.azki.reservation.slot;
 
 import com.azki.reservation.slot.dto.AvailableSlotResponse;
 import com.azki.reservation.slot.dto.SlotCursor;
+import com.azki.reservation.slot.mapper.SlotMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import java.util.List;
 public class SlotQueryService {
 
     private final AvailableSlotRepository slotRepository;
+    private final SlotMapper slotMapper;
 
     @Transactional(
             readOnly = true,
@@ -54,12 +56,6 @@ public class SlotQueryService {
                         pageRequest
                 );
 
-        return slots.stream()
-                .map(slot -> new AvailableSlotResponse(
-                        slot.getId(),
-                        slot.getStartTime(),
-                        slot.getEndTime()
-                ))
-                .toList();
+        return slotMapper.toResponses(slots);
     }
 }
