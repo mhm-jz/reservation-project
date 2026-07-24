@@ -43,6 +43,10 @@ public enum ErrorCode {
     RESERVATION_STATE_ERROR(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "Reservation could not be cancelled"
+    ),
+    INTERNAL_SERVER_ERROR(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "An unexpected error occurred"
     );
 
     private final HttpStatus httpStatus;

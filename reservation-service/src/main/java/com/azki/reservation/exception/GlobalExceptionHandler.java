@@ -2,6 +2,8 @@ package com.azki.reservation.exception;
 
 import com.azki.reservation.user.UserEntity;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -13,6 +15,9 @@ import java.time.Instant;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(
@@ -45,7 +50,11 @@ public class GlobalExceptionHandler {
             );
         }
 
-        throw exception;
+        log.error("Unexpected database integrity violation", exception);
+        return errorResponse(
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                ErrorCode.INTERNAL_SERVER_ERROR.getDefaultMessage()
+        );
     }
 
     @ExceptionHandler(BadCredentialsException.class)

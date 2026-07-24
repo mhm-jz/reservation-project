@@ -2,6 +2,7 @@ package com.azki.reservation.config;
 
 import com.azki.reservation.exception.ErrorResponse;
 import com.azki.reservation.exception.ErrorCode;
+import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.examples.Example;
@@ -54,6 +55,12 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI reservationOpenApi() {
         Components components = new Components()
+                .addSchemas(
+                        "ErrorResponse",
+                        ModelConverters.getInstance()
+                                .read(ErrorResponse.class)
+                                .get("ErrorResponse")
+                )
                 .addResponses(
                         "RegistrationBadRequest",
                         errorResponse(

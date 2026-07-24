@@ -34,7 +34,7 @@ public class ReservationService {
 
         AvailableSlotEntity slot = loadSlot(slotId);
         ReservationEntity reservation =
-                createReservation(userId, slot);
+                buildReservation(userId, slot);
         ReservationEntity savedReservation =
                 reservationRepository.save(reservation);
 
@@ -48,20 +48,14 @@ public class ReservationService {
     ) {
         int updatedRows = slotRepository.reserveIfAvailable(slotId, now);
         if (updatedRows == 0) {
-            throwSlotReservationError(slotId, now);
+            throwSlotReservationError(slotId);
         }
     }
 
-    private void throwSlotReservationError(
-            Long slotId,
-            LocalDateTime now
-    ) {
+    private void throwSlotReservationError(Long slotId) {
         AvailableSlotEntity slot = loadSlot(slotId);
         if (slot.isReserved()) {
             throw new SlotAlreadyReservedException(slotId);
-        }
-        if (slot.getStartTime().isBefore(now)) {
-            throw new SlotUnavailableException(slotId);
         }
         throw new SlotUnavailableException(slotId);
     }
@@ -121,7 +115,7 @@ public class ReservationService {
                 .orElseThrow(() -> new SlotNotFoundException(slotId));
     }
 
-    private ReservationEntity createReservation(
+    private ReservationEntity buildReservation(
             Long userId,
             AvailableSlotEntity slot
     ) {

@@ -6,6 +6,7 @@ import com.azki.reservation.auth.dto.LoginRequest;
 import com.azki.reservation.auth.dto.RegisterRequest;
 import com.azki.reservation.auth.dto.UserResponse;
 import com.azki.reservation.auth.mapper.UserMapper;
+import com.azki.reservation.exception.AuthenticatedUserNotFoundException;
 import com.azki.reservation.exception.EmailAlreadyExistsException;
 import com.azki.reservation.exception.UsernameAlreadyExistsException;
 import com.azki.reservation.security.AuthenticatedUser;
@@ -108,10 +109,6 @@ public class AuthService {
 
     private UserEntity loadUser(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new IllegalStateException(
-                                "Authenticated user no longer exists"
-                        )
-                );
+                .orElseThrow(AuthenticatedUserNotFoundException::new);
     }
 }
