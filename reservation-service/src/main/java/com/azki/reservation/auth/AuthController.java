@@ -6,6 +6,12 @@ import com.azki.reservation.auth.dto.LoginRequest;
 import com.azki.reservation.auth.dto.RegisterRequest;
 import com.azki.reservation.auth.dto.UserResponse;
 import com.azki.reservation.security.AuthenticatedUser;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -15,12 +21,25 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "Authentication")
 public class AuthController {
 
     private final AuthService authService;
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
+    @SecurityRequirements
+    @Operation(summary = "Register a new user")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "400",
+                    ref = "#/components/responses/RegistrationBadRequest"
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    ref = "#/components/responses/UsernameConflict"
+            )
+    })
     public UserResponse register(
             @Valid @RequestBody RegisterRequest request
     ) {
@@ -28,6 +47,21 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @SecurityRequirements
+    @Operation(
+            summary = "Login",
+            description = "Authenticates a user and returns a JWT access token."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "400",
+                    ref = "#/components/responses/LoginBadRequest"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    ref = "#/components/responses/InvalidCredentials"
+            )
+    })
     public AuthResponse login(
             @Valid @RequestBody LoginRequest request
     ) {
@@ -35,7 +69,12 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    @Operation(
+            summary = "Get the current user",
+            description = "Returns the authenticated user's identity."
+    )
     public CurrentUserResponse currentUser(
+            @Parameter(hidden = true)
             @AuthenticationPrincipal
             AuthenticatedUser authenticatedUser
     ) {
