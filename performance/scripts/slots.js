@@ -68,56 +68,17 @@ export const options = {
 
 export function setup() {
     validateConfiguration();
-
-    const username = __ENV.AUTH_USERNAME;
-    const password = __ENV.AUTH_PASSWORD;
-
-    if (!username || !password) {
-        fail('AUTH_USERNAME and AUTH_PASSWORD are required');
-    }
-
-    const loginResponse = http.post(
-        `${BASE_URL}/api/auth/login`,
-        JSON.stringify({username, password}),
-        {
-            headers: {'Content-Type': 'application/json'},
-            tags: {request_type: 'setup_login'},
-            timeout: requestTimeout,
-        }
-    );
-
-    const loginBody = parseJson(loginResponse);
-    const accessToken = loginBody?.accessToken;
-
-    const loginSucceeded = check(loginResponse, {
-        'login returned HTTP 200': (response) =>
-            response.status === 200,
-        'login returned an access token': () =>
-            typeof accessToken === 'string' &&
-            accessToken.length > 0,
-    });
-
-    if (!loginSucceeded) {
-        fail(
-            `Authentication failed. HTTP ${loginResponse.status}: ` +
-            `${loginResponse.body}`
-        );
-    }
-
-    return {
-        authorization: `Bearer ${accessToken}`,
-    };
 }
 
-export function warmUp(data) {
-    executeRequest(data, false);
+export function warmUp() {
+    executeRequest(false);
 }
 
-export function measure(data) {
-    executeRequest(data, true);
+export function measure() {
+    executeRequest(true);
 }
 
-function executeRequest(data, collectResults) {
+function executeRequest(collectResults) {
     const queryParameters = [
         `from=${encodeURIComponent(from)}`,
         `to=${encodeURIComponent(to)}`,
@@ -139,9 +100,6 @@ function executeRequest(data, collectResults) {
     const response = http.get(
         `${BASE_URL}/api/slots?${queryParameters.join('&')}`,
         {
-            headers: {
-                Authorization: data.authorization,
-            },
             tags: {
                 ...metricTags,
                 phase: collectResults

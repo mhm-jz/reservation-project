@@ -7,8 +7,6 @@ TO="${TO:-2026-07-01T00:00:00}"
 LIMIT="${LIMIT:-100}"
 TEST_DURATION="${TEST_DURATION:-60s}"
 WARM_UP_DURATION="${WARM_UP_DURATION:-10s}"
-AUTH_USERNAME="${AUTH_USERNAME:-k6-load-test-user-new}"
-AUTH_PASSWORD="${AUTH_PASSWORD:-TestPassword123}"
 REDIS_CONTAINER="${REDIS_CONTAINER:-reservation-redis}"
 RESULT_DIR="${RESULT_DIR:-performance/results}"
 
@@ -75,8 +73,6 @@ run_level() {
     -e TARGET_VUS="$vus" \
     -e TEST_DURATION="$TEST_DURATION" \
     -e WARM_UP_DURATION="$WARM_UP_DURATION" \
-    -e AUTH_USERNAME="$AUTH_USERNAME" \
-    -e AUTH_PASSWORD="$AUTH_PASSWORD" \
     performance/scripts/slots.js; then
     echo "First-page test passed for ${vus} VUs."
   else

@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -24,6 +25,12 @@ public class JwtAuthenticationFilter
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return HttpMethod.GET.matches(request.getMethod())
+                && "/api/slots".equals(request.getServletPath());
+    }
 
     @Override
     protected void doFilterInternal(

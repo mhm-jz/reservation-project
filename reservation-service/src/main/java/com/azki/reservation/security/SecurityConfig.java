@@ -79,6 +79,12 @@ public class SecurityConfig {
                                 )
                                 .permitAll()
 
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/slots"
+                                )
+                                .permitAll()
+
                                 .anyRequest()
                                 .authenticated()
                 )

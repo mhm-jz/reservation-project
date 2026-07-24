@@ -4,6 +4,7 @@ import com.azki.reservation.slot.dto.SlotPageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -34,6 +35,7 @@ public class SlotController {
     private final SlotService slotService;
 
     @GetMapping
+    @SecurityRequirements
     @Operation(
             summary = "List available reservation slots",
             description = """

@@ -4,14 +4,40 @@ This document describes the load-test setup, execution commands, metrics, and ve
 
 The performance suite validates:
 
-- `GET /api/slots` over a dataset with more than one million slot records
+- public `GET /api/slots` reads over a dataset containing more than one million slot records
 - Redis-backed first-page reads
 - deep cursor/keyset pagination against MySQL
 - concurrent browse, reserve, and cancel flows
 - expected reservation conflicts under contention
 - cache invalidation behavior during write operations
+- reservation and cancellation correctness under concurrent load
 
-> The numbers in this document were collected in a local Docker-based environment. They demonstrate the behavior of the current implementation and are not production capacity guarantees.
+> The numbers in this document were collected in a local Docker-based environment. They demonstrate the behavior of the tested implementation and are not production capacity guarantees.
+
+---
+
+## API authentication model
+
+`GET /api/slots` is intentionally public.
+
+The read-only k6 scenarios:
+
+- do not call the login endpoint
+- do not generate or extract a JWT
+- do not send an `Authorization` header
+- bypass JWT parsing in `JwtAuthenticationFilter`
+
+The protected operations remain authenticated:
+
+```http
+POST /api/reservations
+DELETE /api/reservations/{id}
+GET /api/auth/me
+```
+
+The mixed scenarios still authenticate deterministic performance users because their reserve and cancel steps require JWT authentication.
+
+OpenAPI/Swagger represents `GET /api/slots` with an empty security requirement and does not advertise a `401` response for that operation. Global bearer authentication remains available for protected endpoints.
 
 ---
 
@@ -44,9 +70,7 @@ They are intentionally excluded from Git.
 
 # Environment and dataset
 
-## Dataset
-
-The verified benchmark used:
+## Verified dataset
 
 ```text
 10,000 users
@@ -57,13 +81,13 @@ The verified benchmark used:
 
 ## Required tools
 
-- Java 21+
+- Java 17+
 - Docker and Docker Compose
 - MySQL
 - Redis
 - k6
 - Maven or Maven Wrapper
-- Reservation Service running on its default port `8080`
+- Reservation Service running on port `8080`
 
 Check the environment:
 
@@ -78,73 +102,56 @@ k6 version
 
 ```bash
 docker compose up -d reservation-mysql reservation-redis
+docker compose ps
 ```
 
-The application and performance tools share the normal `reservation_db` database
-in the `reservation-mysql` container on host port `3306`. MySQL data persists in
-the named `reservation_mysql_data` Docker volume. Restarting the application does
-not recreate the database.
+The application and performance runners use:
 
-Do not run `docker compose down -v` unless deleting the persistent database is
-intentional.
+```text
+Database: reservation_db
+MySQL container: reservation-mysql
+MySQL host port: 3306
+Redis container: reservation-redis
+Application port: 8080
+```
+
+MySQL data persists in the `reservation_mysql_data` Docker volume.
+
+Do not run the following command unless deleting the persistent benchmark dataset is intentional:
+
+```bash
+docker compose down -v
+```
 
 ## First-time or repair seeding
 
-Performance seeding is disabled by default. Enable it explicitly for first-time
-seeding or to safely resume a partial dataset:
+Performance seeding is disabled by default. Enable it only when initially creating the dataset or safely repairing an incomplete deterministic dataset:
 
 ```bash
 APP_PERFORMANCE_SEEDING_ENABLED=true \
 ./mvnw -pl reservation-service spring-boot:run
 ```
 
-Performance users default to the password `TestPassword123`. The seeder reads it
-from:
-
-```text
-APP_PERFORMANCE_USER_PASSWORD
-```
-
-Changing that environment variable and starting once with
-`APP_PERFORMANCE_SEEDING_ENABLED=true` safely verifies and, when necessary,
-updates only users proven to be performance-owned by both their deterministic ID
-and exact `perf-user-00001`-style username. It does not update users by prefix
-alone and does not log the configured password.
-
-When using a custom seeded password, pass the same raw value to mixed runners
-through their existing `USER_PASSWORD` override (or `AUTH_PASSWORD` for the
-read-only runners).
-
-The seeder verifies all deterministic performance users, slots, seeded
-reservations, and reserved-slot state. It skips an already-complete dataset and
-uses duplicate-safe inserts to resume missing rows. If existing normal rows
-conflict with deterministic performance IDs, startup stops with a clear error;
-the seeder never truncates, deletes, or overwrites existing structural data.
-
-Credential verification is also part of dataset completeness. A structurally
-complete dataset with an invalid or inconsistent performance-user password hash
-is repaired without recreating slots or reservations. A subsequent
-seeder-enabled startup detects valid credentials and performs no password
-update.
+The seeder is duplicate-safe and skips an already complete dataset. It must not be enabled for normal benchmark runs.
 
 ## Start the application without rerunning the seeder
-
-```bash
-./mvnw -pl reservation-service spring-boot:run
-```
-
-The explicit equivalent is:
 
 ```bash
 APP_PERFORMANCE_SEEDING_ENABLED=false \
 ./mvnw -pl reservation-service spring-boot:run
 ```
 
+The default application address is:
+
+```text
+http://127.0.0.1:8080
+```
+
 ---
 
 # Preflight validation
 
-Run these checks from the repository root:
+Run from the repository root:
 
 ```bash
 node --check performance/scripts/slots.js
@@ -168,16 +175,8 @@ chmod +x performance/runners/*.sh
 Verify the application:
 
 ```bash
-curl -i \
-  -X POST \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"perf-user-00001","password":"TestPassword123"}' \
-  http://127.0.0.1:8080/api/auth/login
+curl -fsS http://127.0.0.1:8080/actuator/health
 ```
-
-The project does not expose an Actuator health endpoint. This login request uses
-the existing `POST /api/auth/login` endpoint and the seeded performance-user
-credentials.
 
 Verify Redis:
 
@@ -191,25 +190,32 @@ Expected response:
 PONG
 ```
 
+## Verify the public/protected boundary
+
+A public slot request without a token must return `200`:
+
+```bash
+curl -i \
+  "http://127.0.0.1:8080/api/slots?from=2026-06-01T00:00:00&to=2026-07-01T00:00:00&limit=20"
+```
+
+The JWT filter also skips the exact public operation when an invalid bearer token is present, so this must still return `200`:
+
+```bash
+curl -i \
+  "http://127.0.0.1:8080/api/slots?from=2026-06-01T00:00:00&to=2026-07-01T00:00:00&limit=20" \
+  -H "Authorization: Bearer invalid-token"
+```
+
+A protected endpoint without a token must return `401`:
+
+```bash
+curl -i http://127.0.0.1:8080/api/auth/me
+```
+
 ---
 
 # Test configuration
-
-## Reservation Service URL
-
-Every performance script and runner defaults to:
-
-```text
-http://127.0.0.1:8080
-```
-
-Override the shared default when the service intentionally runs on another
-port:
-
-```bash
-BASE_URL=http://127.0.0.1:8081 \
-./performance/runners/run-slots-first.sh 20
-```
 
 ## Read-only date range
 
@@ -233,24 +239,7 @@ TO=2026-08-31T00:00:00
 LIMIT=10
 ```
 
-The API accepts a maximum range of 30 days.
-
-Do not use:
-
-```text
-2026-08-01T00:00:00
-to
-2026-09-01T00:00:00
-```
-
-That interval spans 31 days.
-
-## Read-only authentication
-
-```text
-AUTH_USERNAME=k6-load-test-user-new
-AUTH_PASSWORD=TestPassword123
-```
+The API accepts a maximum range of 30 days. Do not use `2026-08-01` through `2026-09-01`, because that interval spans 31 days.
 
 ## Mixed-workload users
 
@@ -286,9 +275,11 @@ The standard VU levels are:
 20, 50, 100, 200
 ```
 
+If no VU argument is provided, the runners use these standard levels.
+
 ---
 
-## 1. First-page read test
+## 1. First-page public read test
 
 This scenario calls:
 
@@ -296,22 +287,21 @@ This scenario calls:
 GET /api/slots?from=...&to=...&limit=100
 ```
 
-without a cursor.
+without a cursor and without authentication.
 
 Expected path:
 
 ```text
-request without cursor
+public request without cursor
+→ JWT filter bypass
 → Redis per-day head cache
 → return at most 100 items
 → use one extra internal item to determine hasNext
 ```
 
-Run all levels:
+Run all standard levels:
 
 ```bash
-AUTH_USERNAME=k6-load-test-user-new \
-AUTH_PASSWORD=TestPassword123 \
 FROM=2026-06-01T00:00:00 \
 TO=2026-07-01T00:00:00 \
 LIMIT=100 \
@@ -336,15 +326,16 @@ results-first-vus-200.json
 
 ---
 
-## 2. Deep-cursor read test
+## 2. Deep-cursor public read test
 
-This scenario calls `GET /api/slots` with a cursor.
+This scenario calls public `GET /api/slots` with a cursor and without authentication.
 
 Expected path:
 
 ```text
-request with cursor
-→ Redis head cache bypass
+public request with cursor
+→ JWT filter bypass
+→ Redis head-cache bypass
 → indexed MySQL keyset query
 → ORDER BY start_time, id
 → fetch limit + 1
@@ -356,11 +347,9 @@ Verified cursor:
 eyJzdGFydFRpbWUiOiIyMDI2LTA2LTI4VDIzOjU4OjAwIiwiaWQiOjc4MzM1OX0
 ```
 
-Run all levels:
+Run all standard levels:
 
 ```bash
-AUTH_USERNAME=k6-load-test-user-new \
-AUTH_PASSWORD=TestPassword123 \
 FROM=2026-06-01T00:00:00 \
 TO=2026-07-01T00:00:00 \
 LIMIT=100 \
@@ -378,8 +367,7 @@ results-deep-vus-100.json
 results-deep-vus-200.json
 ```
 
-Before each level, the runner deletes only the confirmed slot-cache key
-patterns:
+Before each read-only level, the runner clears only these confirmed slot-cache patterns:
 
 ```text
 slots:version:*
@@ -387,21 +375,11 @@ slots:head:*
 slots:head-lock:*
 ```
 
-It uses Redis `SCAN` plus `UNLINK`; it does not flush the shared Redis database.
-After the cursor-only run, it scans `slots:head:*` and `slots:head-lock:*`.
-Finding zero matching keys confirms that cursor requests did not populate the
-slot head cache, regardless of unrelated authentication, session, blacklist, or
-application keys in Redis.
-
-Manual head-cache check:
-
-```bash
-docker exec reservation-redis redis-cli --scan --pattern 'slots:head:*'
-```
+The deep runner also verifies that cursor-only requests do not populate `slots:head:*` or `slots:head-lock:*`.
 
 ---
 
-## 3. Mixed hotspot test
+## 3. Mixed distributed test
 
 Business distribution:
 
@@ -411,7 +389,37 @@ Business distribution:
 5% browse, reserve, and cancel
 ```
 
-All VUs query the same broad range and compete for the same first-page slots.
+VUs rotate across separate daily windows. This keeps requests concurrent while reducing artificial contention on one small slot set.
+
+Run:
+
+```bash
+ALLOW_PERFORMANCE_DATA_RESET=true \
+FROM=2026-08-01T00:00:00 \
+TO=2026-08-31T00:00:00 \
+LIMIT=10 \
+TEST_DURATION=60s \
+BROWSE_RATE=80 \
+RESERVE_RATE=15 \
+CANCEL_RATE=5 \
+USER_PASSWORD=TestPassword123 \
+./performance/runners/run-mixed-distributed.sh 20 50 100 200
+```
+
+Generated files:
+
+```text
+results-mixed-distributed-vus-20.json
+results-mixed-distributed-vus-50.json
+results-mixed-distributed-vus-100.json
+results-mixed-distributed-vus-200.json
+```
+
+---
+
+## 4. Mixed hotspot test
+
+The business ratios are the same as the distributed scenario, but all VUs compete over the same broad range and the same first-page slot set.
 
 This scenario intentionally creates:
 
@@ -444,61 +452,31 @@ results-mixed-hotspot-vus-100.json
 results-mixed-hotspot-vus-200.json
 ```
 
-The mixed runner modifies database rows, so it refuses to start unless
-`ALLOW_PERFORMANCE_DATA_RESET=true` is explicitly supplied. Cleanup runs in a
-transaction and selects only reservations owned by users whose usernames match
-`USERNAME_PREFIX` (default `perf-user-`), whose slots fall inside `FROM`/`TO`,
-and whose reservation timestamp is not the deterministic seeded-baseline
-timestamp. It deletes only those selected reservations, restores only their
-slots when no reservation remains, and reports selected, deleted, and restored
-row counts. Seeded baseline reservations and every non-performance user's data
-are preserved.
+## Mixed-runner cleanup behavior
 
-The runner also clears only the three slot-cache Redis patterns documented
-above.
-
----
-
-## 4. Mixed distributed test
-
-The business ratios are the same as the hotspot test:
+Mixed runners modify database rows, so they refuse to start unless:
 
 ```text
-80% browse only
-15% browse and reserve
-5% browse, reserve, and cancel
+ALLOW_PERFORMANCE_DATA_RESET=true
 ```
 
-VUs rotate over separate daily windows:
+Before each VU level, cleanup:
 
-```javascript
-dayIndex = (__VU - 1 + __ITER) % totalDays;
-```
+1. selects only reservations owned by users matching `USERNAME_PREFIX`
+2. limits selection to slots inside `FROM`/`TO`
+3. excludes deterministic seeded-baseline reservations
+4. deletes only selected performance reservations
+5. restores only their slots when no reservation remains
+6. clears only the three slot-cache Redis patterns documented above
 
-This keeps the requests concurrent while reducing artificial contention on one small slot set.
+Seeded baseline reservations and non-performance user data are preserved.
 
-Run:
+Use the optional final cleanup when required:
 
 ```bash
+CLEANUP_AFTER=true \
 ALLOW_PERFORMANCE_DATA_RESET=true \
-FROM=2026-08-01T00:00:00 \
-TO=2026-08-31T00:00:00 \
-LIMIT=10 \
-TEST_DURATION=60s \
-BROWSE_RATE=80 \
-RESERVE_RATE=15 \
-CANCEL_RATE=5 \
-USER_PASSWORD=TestPassword123 \
-./performance/runners/run-mixed-distributed.sh 20 50 100 200
-```
-
-Generated files:
-
-```text
-results-mixed-distributed-vus-20.json
-results-mixed-distributed-vus-50.json
-results-mixed-distributed-vus-100.json
-results-mixed-distributed-vus-200.json
+./performance/runners/run-mixed-hotspot.sh 200
 ```
 
 ---
@@ -508,9 +486,9 @@ results-mixed-distributed-vus-200.json
 ## Read-only thresholds
 
 ```text
-page duration P95 < 150 ms
-page duration P99 < 200 ms
-page error rate < 1%
+Page duration P95 < 150 ms
+Page duration P99 < 200 ms
+Page error rate < 1%
 HTTP failure rate < 1%
 ```
 
@@ -519,16 +497,12 @@ HTTP failure rate < 1%
 ```text
 Browse P95 < 250 ms
 Browse P99 < 500 ms
-
 Reservation P95 < 500 ms
 Reservation P99 < 750 ms
-
 Cancellation P95 < 500 ms
 Cancellation P99 < 750 ms
-
 Journey P95 < 1000 ms
 Journey P99 < 1500 ms
-
 Technical error rates < 1%
 ```
 
@@ -546,73 +520,83 @@ Expected conflicts are tracked separately and are not technical failures.
 
 ## VU behavior
 
-Within one VU, the journey is sequential:
+Within one VU, a mixed journey is sequential:
 
 ```text
 Browse → optional Reserve → optional Cancel
 ```
 
-Different VUs execute concurrently.
-
-`200 VUs` does not mean `200 requests per second`; the actual request rate depends on latency, think time, and the selected business path.
+Different VUs execute concurrently. `200 VUs` does not mean exactly `200 requests per second`; the request rate depends on latency, think time, and the selected business path.
 
 ---
 
 # Verified benchmark results
 
-## First-page read
+Benchmark date:
 
-| VU | Avg | P95 | P99 | Max | Measurement req/s |
-|---:|---:|---:|---:|---:|---:|
-| 20 | 10.42 ms | 15.59 ms | 18.93 ms | 43.04 ms | 149 |
-| 50 | 11.10 ms | 17.69 ms | 20.92 ms | 39.99 ms | 372 |
-| 100 | 8.83 ms | 16.56 ms | 19.71 ms | 40.08 ms | 760 |
-| 200 | 5.75 ms | 10.98 ms | 15.54 ms | 46.85 ms | 1,565 |
+```text
+2026-07-24
+```
+
+These are the verified results after making `GET /api/slots` public and removing login/JWT work from the read-only runners.
+
+## First-page public read
+
+| VU | Avg | P95 | P99 | Max |
+|---:|---:|---:|---:|---:|
+| 20 | 12.52 ms | 16.56 ms | 20.59 ms | 170.59 ms |
+| 50 | 9.17 ms | 15.51 ms | 22.37 ms | 80.29 ms |
+| 100 | 7.78 ms | 13.73 ms | 18.42 ms | 45.89 ms |
+| 200 | 4.46 ms | 9.01 ms | 13.11 ms | 38.50 ms |
+
+At `200 VUs`:
+
+```text
+Measured page requests: 114,416
+Measured page request rate: 1,586.77 req/s
+Page error rate: 0%
+HTTP failure rate: 0%
+```
 
 Result:
 
 ```text
 All response checks passed.
-HTTP failure rate: 0%.
-Page error rate: 0%.
 All configured thresholds passed.
+The public first-page Redis path remained fast at every tested VU level.
 ```
 
-The first-page Redis cache remained fast at every tested VU level.
-
-At `200 VUs`, it processed approximately `1,565` measured page requests per second with a `P95` of approximately `11 ms`.
-
-The lower average at higher VU levels is likely influenced by a fully warmed cache and local connection reuse. It should not be interpreted as a general rule that higher load improves latency.
+The lower average at higher VU levels is likely influenced by a fully warmed cache, JVM/JIT warm-up, and local connection reuse. It must not be interpreted as a general rule that higher load improves latency.
 
 ---
 
-## Deep cursor
+## Deep-cursor public read
 
-| VU | Avg | P95 | P99 | Max | Measurement req/s |
-|---:|---:|---:|---:|---:|---:|
-| 20 | 18.33 ms | 25.32 ms | 29.61 ms | 40.08 ms | 139 |
-| 50 | 12.85 ms | 19.24 ms | 24.24 ms | 64.25 ms | 367 |
-| 100 | 11.18 ms | 16.80 ms | 21.98 ms | 102.10 ms | 745 |
-| 200 | 61.08 ms | 105.97 ms | 142.18 ms | 365.18 ms | 1,029 |
+| VU | Avg | P95 | P99 | Max |
+|---:|---:|---:|---:|---:|
+| 20 | 17.85 ms | 26.97 ms | 33.56 ms | 43.09 ms |
+| 50 | 12.80 ms | 21.95 ms | 29.11 ms | 49.88 ms |
+| 100 | 9.86 ms | 18.79 ms | 36.29 ms | 165.00 ms |
+| 200 | 33.81 ms | 72.48 ms | 116.41 ms | 342.25 ms |
+
+At `200 VUs`:
+
+```text
+Measured page requests: 89,401
+Measured page request rate: 1,239.23 req/s
+Page error rate: 0%
+HTTP failure rate: 0%
+```
 
 Result:
 
 ```text
 All response and pagination checks passed.
-HTTP failure rate: 0%.
-Page error rate: 0%.
 P95 and P99 thresholds passed at every level.
+Cursor-cache bypass remained intact.
 ```
 
-At `200 VUs`, database pressure became visible:
-
-```text
-Avg: 61.08 ms
-P95: 105.97 ms
-P99: 142.18 ms
-```
-
-The configured percentile targets still passed, but the maximum value reached `365.18 ms`. Therefore, the results do not support a claim that every individual request always remains below `200 ms`.
+The maximum at `200 VUs` reached `342.25 ms`, so these results do not support a claim that every individual request always remains below `200 ms`. The important configured P95/P99 targets still passed.
 
 ---
 
@@ -620,46 +604,35 @@ The configured percentile targets still passed, but the maximum value reached `3
 
 | VU | Journey/s | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 20 | 182 | 228 | 9.18 ms | 11.28 ms | 9.53 ms | 8.99 ms | 0.00% |
-| 50 | 437 | 545 | 8.96 ms | 28.87 ms | 9.64 ms | 9.98 ms | 0.07% |
-| 100 | 802 | 1,005 | 11.81 ms | 33.26 ms | 13.41 ms | 13.84 ms | 0.26% |
-| 200 | 1,235 | 1,542 | 47.68 ms | 96.93 ms | 47.13 ms | 49.33 ms | 2.83% |
+| 20 | 168.18 | 209.38 | 27.45 ms | 42.69 ms | 15.22 ms | 9.59 ms | 0.24% |
+| 50 | 440.03 | 551.76 | 6.91 ms | 16.21 ms | 9.36 ms | 9.02 ms | 0.10% |
+| 100 | 820.40 | 1,028.05 | 7.11 ms | 29.88 ms | 10.51 ms | 9.13 ms | 0.26% |
+| 200 | 1,381.02 | 1,723.88 | 31.05 ms | 38.73 ms | 22.84 ms | 23.69 ms | 1.23% |
 
 ### Distributed 200-VU operation counts
 
 ```text
-Journeys:                    97,622
-HTTP requests:              121,966
-
-Reservation attempts:        19,428
-Successful reservations:     18,878
-Expected conflicts:             550
-
-Cancellation attempts:        4,716
-Successful cancellations:     4,716
+Journeys: 108,613
+HTTP requests: 135,578
+Reservation attempts: 21,529
+Successful reservations: 21,264
+Expected conflicts: 265
+Cancellation attempts: 5,236
+Successful cancellations: 5,236
 ```
 
 Result:
 
 ```text
-Browse errors: 0%.
-Reservation technical errors: 0%.
-Cancellation errors: 0%.
-HTTP failure rate: 0%.
+Browse errors: 0%
+Reservation technical errors: 0%
+Cancellation errors: 0%
+HTTP failure rate: 0%
 All configured thresholds passed.
 All attempted cancellations succeeded.
 ```
 
-This is the closest scenario to a normal high-throughput workload.
-
-At `200 VUs`, the system handled approximately:
-
-```text
-1,235 journeys/s
-1,542 HTTP requests/s
-```
-
-while keeping browse `P95` at approximately `47.68 ms`.
+This is the closest tested scenario to a normal high-throughput workload. At `200 VUs`, the system processed approximately `1,724 HTTP requests/s` while browse P95 remained approximately `31 ms`.
 
 ---
 
@@ -667,46 +640,79 @@ while keeping browse `P95` at approximately `47.68 ms`.
 
 | VU | Journey/s | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 20 | 173 | 216 | 40.22 ms | 49.75 ms | 9.07 ms | 8.48 ms | 2.89% |
-| 50 | 377 | 471 | 57.41 ms | 68.12 ms | 13.92 ms | 13.17 ms | 10.65% |
-| 100 | 422 | 521 | 168.54 ms | 196.22 ms | 82.04 ms | 74.74 ms | 33.65% |
-| 200 | 334 | 409 | 396.20 ms | 565.99 ms | 295.96 ms | 306.44 ms | 66.35% |
+| 20 | 167.56 | 209.89 | 48.14 ms | 70.71 ms | 10.57 ms | 8.33 ms | 5.33% |
+| 50 | 406.95 | 507.40 | 44.27 ms | 52.31 ms | 7.22 ms | 7.06 ms | 6.36% |
+| 100 | 469.12 | 578.84 | 157.71 ms | 176.99 ms | 72.01 ms | 66.60 ms | 32.19% |
+| 200 | 335.31 | 410.91 | 366.72 ms | 538.33 ms | 265.35 ms | 271.34 ms | 66.22% |
 
 ### Hotspot 200-VU operation counts
 
 ```text
-Reservation attempts:         5,323
-Successful reservations:      1,791
-Expected conflicts:            3,532
-
-Cancellation attempts:           447
-Successful cancellations:        447
+Journeys: 26,527
+HTTP requests: 32,508
+Reservation attempts: 5,328
+Successful reservations: 1,800
+Expected conflicts: 3,528
+Cancellation attempts: 453
+Successful cancellations: 453
 ```
 
 Result:
 
 ```text
-Technical error rate: 0%.
-HTTP failure rate: 0%.
+Technical error rate: 0%
+HTTP failure rate: 0%
 Reservation correctness remained intact.
 All attempted cancellations succeeded.
 ```
 
-At `200 VUs`, the browse percentile thresholds failed:
+At `200 VUs`, the browse thresholds failed:
 
 ```text
 Browse P95 target: < 250 ms
-Observed:          396.20 ms
+Observed: 366.72 ms
 
 Browse P99 target: < 500 ms
-Observed:          565.99 ms
+Observed: 538.33 ms
 ```
 
-Throughput also fell from approximately `521 HTTP req/s` at `100 VUs` to `409 HTTP req/s` at `200 VUs`.
-
-The combination of rising latency and falling throughput indicates saturation under an artificial worst-case hotspot.
+Throughput also fell from approximately `579 HTTP req/s` at `100 VUs` to `411 HTTP req/s` at `200 VUs`. Rising latency together with falling throughput indicates saturation under this artificial worst-case hotspot.
 
 The high conflict rate is expected because all users repeatedly compete for the same limited slot set.
+
+---
+
+# Effect of making GET /api/slots public
+
+The before/after comparison below uses the same `200 VU` read-only scenarios.
+
+## First-page 200 VUs
+
+| Metric | Before: JWT required | After: public, no JWT | Change |
+|---|---:|---:|---:|
+| Avg | 4.53 ms | 4.46 ms | 1.5% lower |
+| P95 | 9.25 ms | 9.01 ms | 2.6% lower |
+| P99 | 14.70 ms | 13.11 ms | 10.8% lower |
+| Max | 56.23 ms | 38.50 ms | 31.5% lower |
+| Measured page req/s | 1,583.51 | 1,586.77 | effectively stable |
+| Data sent | 37.79 MB | 16.72 MB | 55.7% lower |
+
+## Deep cursor 200 VUs
+
+| Metric | Before: JWT required | After: public, no JWT | Change |
+|---|---:|---:|---:|
+| Avg | 53.70 ms | 33.81 ms | 37.0% lower |
+| P95 | 113.55 ms | 72.48 ms | 36.2% lower |
+| P99 | 174.21 ms | 116.41 ms | 33.2% lower |
+| Max | 472.68 ms | 342.25 ms | 27.6% lower |
+| Measured page req/s | 1,077.22 | 1,239.23 | 15.0% higher |
+| Data sent | 31.39 MB | 19.48 MB | 37.9% lower |
+
+The new read-only exports contain no authentication setup data because they do not perform login or token extraction.
+
+The improvement in data sent is directly consistent with removing login traffic and bearer headers. Latency and throughput also improved or remained stable, but local JVM, cache, connection-pool, MySQL, and machine conditions can influence benchmark variation. Therefore, the full deep-cursor improvement must not be attributed solely to JWT removal.
+
+The mixed hotspot result at `200 VUs` remained effectively unchanged before and after this API-security change. That indicates the hotspot saturation is driven by contention, write operations, cache invalidation, and rebuild pressure rather than JWT parsing on isolated slot reads.
 
 ---
 
@@ -714,33 +720,28 @@ The high conflict rate is expected because all users repeatedly compete for the 
 
 | Area | Result |
 |---|---|
+| Public `GET /api/slots` contract | Verified |
+| Read-only runners without login/JWT | Verified |
 | First-page Redis cache | Passed; strong performance |
-| Deep cursor up to 100 VUs | Passed; strong performance |
-| Deep cursor at 200 VUs | P95/P99 passed; some outliers above 200 ms |
+| Deep cursor up to 200 VUs | P95/P99 passed; some maximum outliers above 200 ms |
 | Mixed distributed up to 200 VUs | Passed; strong and realistic result |
 | Mixed hotspot up to 100 VUs | Passed |
 | Mixed hotspot at 200 VUs | Saturated; browse thresholds failed |
-| Technical errors | 0% in all 16 runs |
+| Technical errors | 0% in all verified post-change runs |
 | Reservation concurrency correctness | Preserved |
 | Successful cancellation rate | 100% for attempted cancellations |
 
-With more than one million slot records, the first-page, deep-cursor, and mixed distributed scenarios completed without technical errors and kept their important percentile metrics below `200 ms`.
-
-The implementation should not claim that every request in every possible scenario always remains below `200 ms`, because:
-
-- deep cursor at `200 VUs` included a `365.18 ms` maximum outlier
-- distributed `200 VUs` included maximum outliers above `200 ms`
-- the artificial hotspot at `200 VUs` exceeded the browse percentile targets
-
 A defensible conclusion is:
 
-> On a dataset containing 1.2 million slots, the first-page, deep-cursor, and realistic mixed distributed workloads completed at up to 200 concurrent VUs without technical errors. Their key P95/P99 response times remained below 200 ms. The artificial 200-VU hotspot reached saturation because all users repeatedly competed for the same limited slot set, while reservation and cancellation correctness remained intact.
+> On a dataset containing 1.2 million slots, the public first-page, public deep-cursor, and realistic mixed distributed workloads completed at up to 200 concurrent VUs without technical errors. Their key P95/P99 response times remained below 200 ms. The artificial 200-VU hotspot reached saturation because all users repeatedly competed for the same limited slot set, while reservation and cancellation correctness remained intact.
+
+The implementation must not claim that every request in every scenario always stays below `200 ms`, because deep-cursor maximum outliers and the artificial hotspot exceed that value.
 
 ---
 
 # Result files
 
-The verified suite contains 16 result files:
+The standard verified suite contains 16 result files:
 
 ```text
 results-first-vus-20.json
@@ -753,15 +754,15 @@ results-deep-vus-50.json
 results-deep-vus-100.json
 results-deep-vus-200.json
 
-results-mixed-hotspot-vus-20.json
-results-mixed-hotspot-vus-50.json
-results-mixed-hotspot-vus-100.json
-results-mixed-hotspot-vus-200.json
-
 results-mixed-distributed-vus-20.json
 results-mixed-distributed-vus-50.json
 results-mixed-distributed-vus-100.json
 results-mixed-distributed-vus-200.json
+
+results-mixed-hotspot-vus-20.json
+results-mixed-hotspot-vus-50.json
+results-mixed-hotspot-vus-100.json
+results-mixed-hotspot-vus-200.json
 ```
 
 Raw result files must not be committed.
@@ -770,9 +771,9 @@ Raw result files must not be committed.
 
 # Sanitizing and packaging results
 
-k6 `--summary-export` output may contain `setup_data`, including an access token. Do not commit or share raw result files before sanitizing them.
+Read-only result files no longer contain JWT setup data. Mixed-workload exports can still contain `setup_data` with access tokens because those scenarios authenticate users.
 
-With `jq`:
+Sanitize every result before sharing or archiving it:
 
 ```bash
 rm -rf performance/results/sanitized
@@ -783,17 +784,21 @@ for file in performance/results/results-*.json; do
     "$file" \
     > "performance/results/sanitized/$(basename "$file")"
 done
+```
 
+Create an archive:
+
+```bash
 (
   cd performance/results/sanitized
-  zip -r ../performance-results.zip ./*.json
+  zip -r ../performance-results-$(date +%Y%m%d-%H%M%S).zip ./*.json
 )
 ```
 
 Check the archive:
 
 ```bash
-unzip -l performance/results/performance-results.zip
+unzip -l performance/results/performance-results-*.zip
 ```
 
-The generated ZIP also belongs under `performance/results/` and must remain excluded from Git.
+Generated JSON and ZIP files must remain excluded from Git.
