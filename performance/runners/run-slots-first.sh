@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://127.0.0.1:8081}"
+BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
 FROM="${FROM:-2026-06-01T00:00:00}"
 TO="${TO:-2026-07-01T00:00:00}"
 LIMIT="${LIMIT:-100}"
@@ -13,6 +13,7 @@ REDIS_CONTAINER="${REDIS_CONTAINER:-reservation-redis}"
 RESULT_DIR="${RESULT_DIR:-performance/results}"
 
 VUS_LEVELS=("$@")
+overall_exit_code=0
 if [[ ${#VUS_LEVELS[@]} -eq 0 ]]; then
   VUS_LEVELS=(20 50 100 200)
 fi
@@ -82,6 +83,7 @@ run_level() {
     local status=$?
     if [[ "$status" -eq 99 ]]; then
       echo "WARNING: k6 thresholds failed for ${vus} VUs; continuing." >&2
+      overall_exit_code=99
     else
       echo "k6 failed with exit code $status." >&2
       exit "$status"
@@ -104,3 +106,5 @@ fi
 for vus in "${VUS_LEVELS[@]}"; do
   run_level "$vus"
 done
+
+exit "$overall_exit_code"

@@ -2,7 +2,8 @@ import http from 'k6/http';
 import {check, fail, sleep} from 'k6';
 import {Counter, Rate, Trend} from 'k6/metrics';
 
-const baseUrl = __ENV.BASE_URL || 'http://127.0.0.1:8081';
+const BASE_URL =
+    __ENV.BASE_URL || 'http://127.0.0.1:8080';
 const pageType = __ENV.PAGE_TYPE || 'first';
 
 const from = __ENV.FROM || '2026-06-01T00:00:00';
@@ -76,7 +77,7 @@ export function setup() {
     }
 
     const loginResponse = http.post(
-        `${baseUrl}/api/auth/login`,
+        `${BASE_URL}/api/auth/login`,
         JSON.stringify({username, password}),
         {
             headers: {'Content-Type': 'application/json'},
@@ -136,7 +137,7 @@ function executeRequest(data, collectResults) {
     };
 
     const response = http.get(
-        `${baseUrl}/api/slots?${queryParameters.join('&')}`,
+        `${BASE_URL}/api/slots?${queryParameters.join('&')}`,
         {
             headers: {
                 Authorization: data.authorization,

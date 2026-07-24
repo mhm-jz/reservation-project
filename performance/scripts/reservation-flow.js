@@ -15,7 +15,8 @@ const EXPECTED_CONFLICT_CODES = new Set([
     'SLOT_UNAVAILABLE',
 ]);
 
-const baseUrl = __ENV.BASE_URL || 'http://127.0.0.1:8081';
+const BASE_URL =
+    __ENV.BASE_URL || 'http://127.0.0.1:8080';
 const from = __ENV.FROM || '2026-08-01T00:00:00';
 const to = __ENV.TO || '2026-08-31T00:00:00';
 const workloadMode = __ENV.WORKLOAD_MODE || 'hotspot';
@@ -157,7 +158,7 @@ export function setup() {
             );
 
         const loginResponse = http.post(
-            `${baseUrl}/api/auth/login`,
+            `${BASE_URL}/api/auth/login`,
             JSON.stringify({
                 username,
                 password: userPassword,
@@ -266,7 +267,7 @@ export function mixedJourney(data) {
 
 function browseSlots(authorization, window, tags) {
     const response = http.get(
-        `${baseUrl}/api/slots?` +
+        `${BASE_URL}/api/slots?` +
         [
             `from=${encodeURIComponent(window.from)}`,
             `to=${encodeURIComponent(window.to)}`,
@@ -334,7 +335,7 @@ function browseSlots(authorization, window, tags) {
 
 function reserveSlot(authorization, slotId, tags) {
     const response = http.post(
-        `${baseUrl}/api/reservations`,
+        `${BASE_URL}/api/reservations`,
         JSON.stringify({slotId}),
         {
             headers: {
@@ -406,7 +407,7 @@ function cancelReservation(
     tags
 ) {
     const response = http.del(
-        `${baseUrl}/api/reservations/${reservationId}`,
+        `${BASE_URL}/api/reservations/${reservationId}`,
         null,
         {
             headers: {

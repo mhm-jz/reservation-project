@@ -3,7 +3,7 @@ set -euo pipefail
 
 WORKLOAD_MODE="hotspot"
 
-BASE_URL="${BASE_URL:-http://127.0.0.1:8081}"
+BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
 FROM="${FROM:-2026-08-01T00:00:00}"
 TO="${TO:-2026-08-31T00:00:00}"
 LIMIT="${LIMIT:-10}"
@@ -31,6 +31,7 @@ RESULT_DIR="${RESULT_DIR:-performance/results}"
 CLEANUP_AFTER="${CLEANUP_AFTER:-false}"
 
 VUS_LEVELS=("$@")
+overall_exit_code=0
 if [[ ${#VUS_LEVELS[@]} -eq 0 ]]; then
   VUS_LEVELS=(20 50 100 200)
 fi
@@ -62,8 +63,8 @@ validate_environment() {
     exit 1
   fi
 
-  if [[ ! "$USERNAME_PREFIX" =~ ^[[:alnum:]_-]+$ ]]; then
-    echo "USERNAME_PREFIX contains characters unsafe for cleanup SQL." >&2
+  if [[ ! "$USERNAME_PREFIX" =~ ^[[:alnum:]-]+$ ]]; then
+    echo "USERNAME_PREFIX may contain only letters, numbers, and hyphens" >&2
     exit 1
   fi
 
@@ -218,6 +219,7 @@ run_level() {
 
     if [[ "$status" -eq 99 ]]; then
       echo "WARNING: k6 thresholds failed for ${vus} VUs; continuing." >&2
+      overall_exit_code=99
     else
       echo "k6 failed with exit code $status." >&2
       exit "$status"
@@ -236,3 +238,5 @@ if [[ "$CLEANUP_AFTER" == "true" ]]; then
   reset_performance_data
   echo "Final cleanup completed."
 fi
+
+exit "$overall_exit_code"

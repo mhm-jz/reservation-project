@@ -17,10 +17,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        jdbc:
-          batch_size: 5000
-        order_inserts: true
-        order_updates: true
 
   data:
     redis:
@@ -34,9 +30,10 @@ app:
     enabled: ${SLOTS_CACHE_ENABLED:true}
   performance-seeding:
     enabled: ${APP_PERFORMANCE_SEEDING_ENABLED:false}
+    user-password: ${APP_PERFORMANCE_USER_PASSWORD:TestPassword123}
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 security:
   jwt:

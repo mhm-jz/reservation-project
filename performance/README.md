@@ -57,13 +57,13 @@ The verified benchmark used:
 
 ## Required tools
 
-- Java 17+
+- Java 21+
 - Docker and Docker Compose
 - MySQL
 - Redis
 - k6
 - Maven or Maven Wrapper
-- Reservation Service running on port `8081`
+- Reservation Service running on its default port `8080`
 
 Check the environment:
 
@@ -98,11 +98,34 @@ APP_PERFORMANCE_SEEDING_ENABLED=true \
 ./mvnw -pl reservation-service spring-boot:run
 ```
 
+Performance users default to the password `TestPassword123`. The seeder reads it
+from:
+
+```text
+APP_PERFORMANCE_USER_PASSWORD
+```
+
+Changing that environment variable and starting once with
+`APP_PERFORMANCE_SEEDING_ENABLED=true` safely verifies and, when necessary,
+updates only users proven to be performance-owned by both their deterministic ID
+and exact `perf-user-00001`-style username. It does not update users by prefix
+alone and does not log the configured password.
+
+When using a custom seeded password, pass the same raw value to mixed runners
+through their existing `USER_PASSWORD` override (or `AUTH_PASSWORD` for the
+read-only runners).
+
 The seeder verifies all deterministic performance users, slots, seeded
 reservations, and reserved-slot state. It skips an already-complete dataset and
 uses duplicate-safe inserts to resume missing rows. If existing normal rows
 conflict with deterministic performance IDs, startup stops with a clear error;
-the seeder never truncates, deletes, or overwrites existing data.
+the seeder never truncates, deletes, or overwrites existing structural data.
+
+Credential verification is also part of dataset completeness. A structurally
+complete dataset with an invalid or inconsistent performance-user password hash
+is repaired without recreating slots or reservations. A subsequent
+seeder-enabled startup detects valid credentials and performs no password
+update.
 
 ## Start the application without rerunning the seeder
 
@@ -145,8 +168,16 @@ chmod +x performance/runners/*.sh
 Verify the application:
 
 ```bash
-curl -i http://127.0.0.1:8081/actuator/health
+curl -i \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"perf-user-00001","password":"TestPassword123"}' \
+  http://127.0.0.1:8080/api/auth/login
 ```
+
+The project does not expose an Actuator health endpoint. This login request uses
+the existing `POST /api/auth/login` endpoint and the seeded performance-user
+credentials.
 
 Verify Redis:
 
@@ -163,6 +194,22 @@ PONG
 ---
 
 # Test configuration
+
+## Reservation Service URL
+
+Every performance script and runner defaults to:
+
+```text
+http://127.0.0.1:8080
+```
+
+Override the shared default when the service intentionally runs on another
+port:
+
+```bash
+BASE_URL=http://127.0.0.1:8081 \
+./performance/runners/run-slots-first.sh 20
+```
 
 ## Read-only date range
 
