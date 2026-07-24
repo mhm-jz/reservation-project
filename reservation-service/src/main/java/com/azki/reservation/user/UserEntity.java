@@ -14,6 +14,10 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(
                         name = "uk_users_username",
                         columnNames = "username"
+                ),
+                @UniqueConstraint(
+                        name = "uk_users_email",
+                        columnNames = "email"
                 )
         }
 )
@@ -32,6 +36,15 @@ public class UserEntity {
     )
     private String username;
 
+
+    @Column(
+            name = "email",
+            nullable = false,
+            length = 255
+    )
+    private String email;
+
+
     @Column(
             name = "password",
             nullable = false,
@@ -46,8 +59,13 @@ public class UserEntity {
     )
     private LocalDateTime createdAt;
 
-    public UserEntity(String username, String passwordHash) {
+    public UserEntity(
+            String username,
+            String email,
+            String passwordHash
+    ) {
         this.username = username;
+        this.email = email;
         this.passwordHash = passwordHash;
     }
 

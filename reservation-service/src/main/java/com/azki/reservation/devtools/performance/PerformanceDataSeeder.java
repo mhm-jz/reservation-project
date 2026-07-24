@@ -30,6 +30,7 @@ public class PerformanceDataSeeder implements ApplicationRunner {
     private static final int USER_COUNT = 10_000;
     private static final int FIRST_USER_ID = 1;
     private static final String USERNAME_PREFIX = "perf-user-";
+    private static final String EMAIL_SUFFIX = "@example.test";
     private static final int SLOT_COUNT = 1_200_000;
     private static final int RESERVED_SLOT_COUNT = 360_000;
     private static final int BATCH_SIZE = 5_000;
@@ -136,15 +137,22 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                     2,
                     USERNAME_PREFIX + String.format("%05d", itemNumber)
             );
-            statement.setString(3, encodedPerformancePassword);
-            statement.setObject(4, CREATED_AT);
+            statement.setString(
+                    3,
+                    USERNAME_PREFIX
+                            + String.format("%05d", itemNumber)
+                            + EMAIL_SUFFIX
+            );
+            statement.setString(4, encodedPerformancePassword);
+            statement.setObject(5, CREATED_AT);
         }, """
                 insert ignore into users (
                     id,
                     username,
+                    email,
                     password,
                     created_at
-                ) values (?, ?, ?, ?)
+                ) values (?, ?, ?, ?, ?)
                 """);
     }
 
@@ -260,10 +268,17 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                               ?,
                               lpad(id, 5, '0')
                           )
+                          and email = concat(
+                              ?,
+                              lpad(id, 5, '0'),
+                              ?
+                          )
                         """,
                 FIRST_USER_ID,
                 USER_COUNT,
-                USERNAME_PREFIX
+                USERNAME_PREFIX,
+                USERNAME_PREFIX,
+                EMAIL_SUFFIX
         );
         boolean credentialsValid = inspectCredentials(users);
         long slots = queryCount(
@@ -294,13 +309,21 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                           and r.created_at = ?
                           and u.id = mod(r.slot_id - 1, ?) + 1
                           and u.username = concat(
-                              'perf-user-',
+                              ?,
                               lpad(u.id, 5, '0')
+                          )
+                          and u.email = concat(
+                              ?,
+                              lpad(u.id, 5, '0'),
+                              ?
                           )
                         """,
                 SLOT_COUNT,
                 CREATED_AT,
-                USER_COUNT
+                USER_COUNT,
+                USERNAME_PREFIX,
+                USERNAME_PREFIX,
+                EMAIL_SUFFIX
         );
         long reservedSlots = queryCount(
                 """
@@ -341,11 +364,18 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                               ?,
                               lpad(id, 5, '0')
                           )
+                          and email = concat(
+                              ?,
+                              lpad(id, 5, '0'),
+                              ?
+                          )
                         """,
                 String.class,
                 FIRST_USER_ID,
                 USER_COUNT,
-                USERNAME_PREFIX
+                USERNAME_PREFIX,
+                USERNAME_PREFIX,
+                EMAIL_SUFFIX
         );
 
         if (passwordHashes.size() != 1) {
@@ -379,11 +409,18 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                               ?,
                               lpad(id, 5, '0')
                           )
+                          and email = concat(
+                              ?,
+                              lpad(id, 5, '0'),
+                              ?
+                          )
                         """,
                 encodedPerformancePassword,
                 FIRST_USER_ID,
                 USER_COUNT,
-                USERNAME_PREFIX
+                USERNAME_PREFIX,
+                USERNAME_PREFIX,
+                EMAIL_SUFFIX
         );
     }
 
@@ -391,24 +428,33 @@ public class PerformanceDataSeeder implements ApplicationRunner {
         logConflictSample(
                 "performance user ID conflicts",
                 """
-                        select id, username, created_at
+                        select id, username, email, created_at
                         from users
                         where id between ? and ?
-                          and username <> concat(
-                              ?,
-                              lpad(id, 5, '0')
+                          and not (
+                              username = concat(
+                                  ?,
+                                  lpad(id, 5, '0')
+                              )
+                              and email = concat(
+                                  ?,
+                                  lpad(id, 5, '0'),
+                                  ?
+                              )
                           )
                         order by id
                         limit 10
                         """,
                 FIRST_USER_ID,
                 USER_COUNT,
-                USERNAME_PREFIX
+                USERNAME_PREFIX,
+                USERNAME_PREFIX,
+                EMAIL_SUFFIX
         );
         logConflictSample(
                 "performance usernames assigned to unexpected IDs",
                 """
-                        select id, username, created_at
+                        select id, username, email, created_at
                         from users
                         where username between ? and ?
                           and username <> concat(
@@ -421,6 +467,29 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                 USERNAME_PREFIX + String.format("%05d", FIRST_USER_ID),
                 USERNAME_PREFIX + String.format("%05d", USER_COUNT),
                 USERNAME_PREFIX
+        );
+        logConflictSample(
+                "performance emails assigned to unexpected IDs",
+                """
+                        select id, username, email, created_at
+                        from users
+                        where email between ? and ?
+                          and email <> concat(
+                              ?,
+                              lpad(id, 5, '0'),
+                              ?
+                          )
+                        order by email
+                        limit 10
+                        """,
+                USERNAME_PREFIX
+                        + String.format("%05d", FIRST_USER_ID)
+                        + EMAIL_SUFFIX,
+                USERNAME_PREFIX
+                        + String.format("%05d", USER_COUNT)
+                        + EMAIL_SUFFIX,
+                USERNAME_PREFIX,
+                EMAIL_SUFFIX
         );
         logConflictSample(
                 "performance slot ID conflicts",
@@ -463,6 +532,11 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                                   ?,
                                   lpad(u.id, 5, '0')
                               )
+                              and u.email = concat(
+                                  ?,
+                                  lpad(u.id, 5, '0'),
+                                  ?
+                              )
                           ), false)
                         order by r.id
                         limit 10
@@ -470,7 +544,9 @@ public class PerformanceDataSeeder implements ApplicationRunner {
                 SLOT_COUNT,
                 CREATED_AT,
                 USER_COUNT,
-                USERNAME_PREFIX
+                USERNAME_PREFIX,
+                USERNAME_PREFIX,
+                EMAIL_SUFFIX
         );
         logConflictSample(
                 "performance reservation slot conflicts",

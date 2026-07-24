@@ -37,7 +37,7 @@ public class AuthController {
             ),
             @ApiResponse(
                     responseCode = "409",
-                    ref = "#/components/responses/UsernameConflict"
+                    ref = "#/components/responses/RegistrationConflict"
             )
     })
     public UserResponse register(
@@ -78,9 +78,6 @@ public class AuthController {
             @AuthenticationPrincipal
             AuthenticatedUser authenticatedUser
     ) {
-        return new CurrentUserResponse(
-                authenticatedUser.getId(),
-                authenticatedUser.getUsername()
-        );
+        return authService.currentUser(authenticatedUser.getId());
     }
 }

@@ -57,11 +57,16 @@ public class OpenApiConfig {
                         "RegistrationBadRequest",
                         errorResponse(
                                 "Registration request validation failed",
-                                Map.of(
-                                        "validationError",
+                                orderedExamples(
+                                        "invalidUsername",
                                         errorExample(
                                                 "VALIDATION_ERROR",
                                                 "username: size must be between 3 and 100"
+                                        ),
+                                        "invalidEmail",
+                                        errorExample(
+                                                "VALIDATION_ERROR",
+                                                "email: must be a well-formed email address"
                                         )
                                 )
                         )
@@ -173,14 +178,19 @@ public class OpenApiConfig {
                         )
                 )
                 .addResponses(
-                        "UsernameConflict",
+                        "RegistrationConflict",
                         errorResponse(
-                                "The username is already registered",
-                                Map.of(
+                                "The username or email is already registered",
+                                orderedExamples(
                                         "usernameAlreadyExists",
                                         errorExample(
                                                 "USERNAME_ALREADY_EXISTS",
                                                 "Username already exists: alice"
+                                        ),
+                                        "emailAlreadyExists",
+                                        errorExample(
+                                                "EMAIL_ALREADY_EXISTS",
+                                                "Email already exists: alice@example.com"
                                         )
                                 )
                         )

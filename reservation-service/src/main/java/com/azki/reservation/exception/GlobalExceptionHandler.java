@@ -40,6 +40,18 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(EmailAlreadyExistsException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleEmailAlreadyExists(
+            EmailAlreadyExistsException exception
+    ) {
+        return new ErrorResponse(
+                "EMAIL_ALREADY_EXISTS",
+                exception.getMessage(),
+                Instant.now()
+        );
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ErrorResponse handleBadCredentials() {
