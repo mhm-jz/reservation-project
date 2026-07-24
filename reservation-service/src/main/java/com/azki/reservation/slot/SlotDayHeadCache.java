@@ -1,10 +1,10 @@
 package com.azki.reservation.slot;
 
+import com.azki.reservation.config.SlotCacheProperties;
 import com.azki.reservation.slot.dto.AvailableSlotResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -19,11 +19,8 @@ import java.util.concurrent.ThreadLocalRandom;
 @RequiredArgsConstructor
 public class SlotDayHeadCache {
 
-    public static final int MAX_SUPPORTED_PAGE_SIZE = 100;
-    private static final int HEAD_SIZE = MAX_SUPPORTED_PAGE_SIZE + 1;
     private static final TypeReference<List<AvailableSlotResponse>> SLOT_LIST_TYPE =
             new TypeReference<>() {};
-    private static final Duration LOCK_TTL = Duration.ofSeconds(3);
     private static final DefaultRedisScript<Long> RELEASE_LOCK_SCRIPT =
             new DefaultRedisScript<>(
                     "if redis.call('get', KEYS[1]) == ARGV[1] then " +
@@ -34,9 +31,7 @@ public class SlotDayHeadCache {
     private final SlotQueryService slotQueryService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-
-    @Value("${app.slots-cache.enabled:true}")
-    private boolean enabled;
+    private final SlotCacheProperties properties;
 
     public DayHeadCacheResult getDayHead(LocalDate day) {
         try {
@@ -66,11 +61,11 @@ public class SlotDayHeadCache {
     }
 
     public boolean isEnabled() {
-        return enabled;
+        return properties.enabled();
     }
 
     public void incrementVersion(LocalDate day) {
-        if (!enabled) {
+        if (!properties.enabled()) {
             return;
         }
 
@@ -89,12 +84,19 @@ public class SlotDayHeadCache {
         String lockKey = lockKey(day, version);
         String lockToken = UUID.randomUUID().toString();
         Boolean acquired = redisTemplate.opsForValue()
-                .setIfAbsent(lockKey, lockToken, LOCK_TTL);
+                .setIfAbsent(
+                        lockKey,
+                        lockToken,
+                        properties.lockLease()
+                );
 
         if (Boolean.TRUE.equals(acquired)) {
             List<AvailableSlotResponse> slots;
             try {
-                slots = slotQueryService.loadDayHead(day, HEAD_SIZE);
+                slots = slotQueryService.loadDayHead(
+                        day,
+                        properties.headSize()
+                );
             } catch (RuntimeException exception) {
                 releaseLock(lockKey, lockToken);
                 throw exception;
@@ -117,9 +119,9 @@ public class SlotDayHeadCache {
                     : DayHeadCacheResult.loadedWithRedisFailure(slots);
         }
 
-        for (int attempt = 0; attempt < 2; attempt++) {
+        for (Duration retryDelay : properties.lockRetryDelays()) {
             try {
-                Thread.sleep(attempt == 0 ? 25L : 50L);
+                Thread.sleep(retryDelay.toMillis());
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 break;
@@ -173,7 +175,14 @@ public class SlotDayHeadCache {
     }
 
     private Duration cacheTtl() {
-        return Duration.ofSeconds(ThreadLocalRandom.current().nextLong(30, 61));
+        long minimumSeconds = properties.minimumTtl().toSeconds();
+        long maximumSeconds = properties.maximumTtl().toSeconds();
+        return Duration.ofSeconds(
+                ThreadLocalRandom.current().nextLong(
+                        minimumSeconds,
+                        maximumSeconds + 1
+                )
+        );
     }
 
     private String versionKey(LocalDate day) {

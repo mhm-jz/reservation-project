@@ -1,4 +1,4 @@
-package com.azki.reservation.exception;
+package com.azki.reservation.common.exception;
 
 import com.azki.reservation.user.UserEntity;
 import jakarta.validation.ConstraintViolationException;

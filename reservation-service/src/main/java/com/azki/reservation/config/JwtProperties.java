@@ -1,4 +1,4 @@
-package com.azki.reservation.security;
+package com.azki.reservation.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

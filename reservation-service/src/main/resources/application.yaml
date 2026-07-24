@@ -26,11 +26,23 @@ spring:
       timeout: 1s
 
 app:
+  slot-search:
+    maximum-range: 30d
+    default-page-size: 20
+    maximum-page-size: 100
   slots-cache:
     enabled: ${SLOTS_CACHE_ENABLED:true}
+    head-size: 101
+    minimum-ttl: 30s
+    maximum-ttl: 60s
+    lock-lease: 3s
+    lock-retry-delays:
+      - 25ms
+      - 50ms
   performance-seeding:
     enabled: ${APP_PERFORMANCE_SEEDING_ENABLED:false}
     user-password: ${APP_PERFORMANCE_USER_PASSWORD:TestPassword123}
+    batch-size: 5000
 
 server:
   port: ${SERVER_PORT:8080}

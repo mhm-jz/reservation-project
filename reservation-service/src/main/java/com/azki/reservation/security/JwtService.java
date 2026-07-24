@@ -1,5 +1,6 @@
 package com.azki.reservation.security;
 
+import com.azki.reservation.config.JwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;

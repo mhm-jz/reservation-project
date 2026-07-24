@@ -1,4 +1,4 @@
-package com.azki.reservation.exception;
+package com.azki.reservation.common.exception;
 
 public final class SlotUnavailableException
         extends BusinessException {

@@ -1,11 +1,11 @@
 package com.azki.reservation.devtools.performance;
 
+import com.azki.reservation.config.PerformanceSeedingProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,7 +33,6 @@ public class PerformanceDataSeeder implements ApplicationRunner {
     private static final String EMAIL_SUFFIX = "@example.test";
     private static final int SLOT_COUNT = 1_200_000;
     private static final int RESERVED_SLOT_COUNT = 360_000;
-    private static final int BATCH_SIZE = 5_000;
     private static final int MINUTES_IN_YEAR = 365 * 24 * 60;
     private static final LocalDateTime SLOT_TIMELINE_START =
             LocalDateTime.of(2026, 1, 1, 0, 0);
@@ -42,17 +41,16 @@ public class PerformanceDataSeeder implements ApplicationRunner {
 
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
-    private final String configuredPerformancePassword;
+    private final PerformanceSeedingProperties properties;
 
     public PerformanceDataSeeder(
             JdbcTemplate jdbcTemplate,
             PasswordEncoder passwordEncoder,
-            @Value("${app.performance-seeding.user-password}")
-            String configuredPerformancePassword
+            PerformanceSeedingProperties properties
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = passwordEncoder;
-        this.configuredPerformancePassword = configuredPerformancePassword;
+        this.properties = properties;
     }
 
     @Override
@@ -78,7 +76,7 @@ public class PerformanceDataSeeder implements ApplicationRunner {
             );
 
             encodedPerformancePassword =
-                    passwordEncoder.encode(configuredPerformancePassword);
+                    passwordEncoder.encode(properties.userPassword());
             seedUsers(encodedPerformancePassword);
             seedSlots();
             seedReservations();
@@ -107,7 +105,7 @@ public class PerformanceDataSeeder implements ApplicationRunner {
 
             if (encodedPerformancePassword == null) {
                 encodedPerformancePassword =
-                        passwordEncoder.encode(configuredPerformancePassword);
+                        passwordEncoder.encode(properties.userPassword());
             }
 
             int repairedUsers =
@@ -223,11 +221,11 @@ public class PerformanceDataSeeder implements ApplicationRunner {
     ) {
         for (int batchStart = 1;
              batchStart <= totalItems;
-             batchStart += BATCH_SIZE) {
+             batchStart += properties.batchSize()) {
 
             int firstItem = batchStart;
             int batchSize = Math.min(
-                    BATCH_SIZE,
+                    properties.batchSize(),
                     totalItems - batchStart + 1
             );
 
@@ -389,7 +387,7 @@ public class PerformanceDataSeeder implements ApplicationRunner {
 
         try {
             return passwordEncoder.matches(
-                    configuredPerformancePassword,
+                    properties.userPassword(),
                     storedHash
             );
         } catch (IllegalArgumentException exception) {

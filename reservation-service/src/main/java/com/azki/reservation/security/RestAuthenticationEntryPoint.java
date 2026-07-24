@@ -1,7 +1,7 @@
 package com.azki.reservation.security;
 
-import com.azki.reservation.exception.ErrorResponse;
-import com.azki.reservation.exception.ErrorCode;
+import com.azki.reservation.common.exception.ErrorResponse;
+import com.azki.reservation.common.exception.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

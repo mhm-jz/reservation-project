@@ -1,7 +1,7 @@
-package com.azki.reservation.config;
+package com.azki.reservation.common.openapi;
 
-import com.azki.reservation.exception.ErrorResponse;
-import com.azki.reservation.exception.ErrorCode;
+import com.azki.reservation.common.exception.ErrorResponse;
+import com.azki.reservation.common.exception.ErrorCode;
 import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;

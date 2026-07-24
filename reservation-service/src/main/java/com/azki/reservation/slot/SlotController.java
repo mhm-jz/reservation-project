@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
@@ -69,9 +68,11 @@ public class SlotController {
             )
             LocalDateTime to,
 
-            @RequestParam(defaultValue = "20")
+            @RequestParam(
+                    defaultValue =
+                            "${app.slot-search.default-page-size}"
+            )
             @Min(1)
-            @Max(100)
             @Parameter(
                     description = "Maximum number of slots to return",
                     example = "20"

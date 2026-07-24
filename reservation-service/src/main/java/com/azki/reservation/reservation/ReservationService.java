@@ -1,6 +1,10 @@
 package com.azki.reservation.reservation;
 
-import com.azki.reservation.exception.*;
+import com.azki.reservation.common.exception.ReservationNotFoundException;
+import com.azki.reservation.common.exception.ReservationStateException;
+import com.azki.reservation.common.exception.SlotAlreadyReservedException;
+import com.azki.reservation.common.exception.SlotNotFoundException;
+import com.azki.reservation.common.exception.SlotUnavailableException;
 import com.azki.reservation.reservation.mapper.ReservationMapper;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import com.azki.reservation.slot.AvailableSlotEntity;

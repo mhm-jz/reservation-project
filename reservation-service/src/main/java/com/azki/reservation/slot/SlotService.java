@@ -1,9 +1,11 @@
 package com.azki.reservation.slot;
 
+import com.azki.reservation.config.SlotCacheProperties;
+import com.azki.reservation.config.SlotSearchProperties;
 import com.azki.reservation.slot.dto.AvailableSlotResponse;
 import com.azki.reservation.slot.dto.SlotCursor;
 import com.azki.reservation.slot.dto.SlotPageResponse;
-import com.azki.reservation.exception.InvalidSlotQueryException;
+import com.azki.reservation.common.exception.InvalidSlotQueryException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,8 @@ public class SlotService {
     private final SlotDayHeadCache slotDayHeadCache;
     private final SlotQueryService slotQueryService;
     private final ObjectMapper objectMapper;
+    private final SlotSearchProperties searchProperties;
+    private final SlotCacheProperties cacheProperties;
 
     public SlotPageResponse getAvailableSlots(
             LocalDateTime from,
@@ -119,7 +123,7 @@ public class SlotService {
             }
 
             if (cacheResult.slots().size() ==
-                    SlotDayHeadCache.MAX_SUPPORTED_PAGE_SIZE + 1) {
+                    cacheProperties.headSize()) {
                 return slotQueryService.loadPage(
                         from,
                         to,
@@ -153,19 +157,27 @@ public class SlotService {
         }
 
         if (Duration.between(from, to).compareTo(
-                Duration.ofDays(30)
+                searchProperties.maximumRange()
         ) > 0) {
             throw new InvalidSlotQueryException(
-                    "The requested range must not exceed 30 days"
+                    "The requested range must not exceed " +
+                            searchProperties.maximumRange().toDays() +
+                            " days"
             );
         }
     }
 
     private void validateLimit(int limit) {
-        if (limit < 1 ||
-                limit > SlotDayHeadCache.MAX_SUPPORTED_PAGE_SIZE) {
+        if (limit < 1) {
             throw new InvalidSlotQueryException(
-                    "'limit' must be between 1 and 100"
+                    "'limit' must be between 1 and " +
+                            searchProperties.maximumPageSize()
+            );
+        }
+        if (limit > searchProperties.maximumPageSize()) {
+            throw new InvalidSlotQueryException(
+                    "getAvailableSlots.limit: must be less than or equal to " +
+                            searchProperties.maximumPageSize()
             );
         }
     }

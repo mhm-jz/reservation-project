@@ -1,4 +1,4 @@
-package com.azki.reservation.exception;
+package com.azki.reservation.common.exception;
 
 public abstract class BusinessException extends RuntimeException {
 
