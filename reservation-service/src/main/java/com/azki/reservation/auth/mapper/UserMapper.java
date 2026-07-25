@@ -2,7 +2,7 @@ package com.azki.reservation.auth.mapper;
 
 import com.azki.reservation.auth.dto.CurrentUserResponse;
 import com.azki.reservation.auth.dto.UserResponse;
-import com.azki.reservation.user.UserEntity;
+import com.azki.reservation.user.entity.UserEntity;
 import org.mapstruct.Mapper;
 import org.mapstruct.ReportingPolicy;
 

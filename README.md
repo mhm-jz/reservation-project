@@ -15,6 +15,53 @@ and Redis through `127.0.0.1`.
 - JJWT and Springdoc OpenAPI
 - MapStruct and Lombok
 
+## Project structure
+
+Application code uses feature-first packages. Each feature is divided into
+responsibility-specific subpackages:
+
+```text
+com.azki.reservation
+├── auth/
+│   ├── controller/
+│   ├── dto/
+│   ├── mapper/
+│   └── service/
+├── reservation/
+│   ├── controller/
+│   ├── dto/
+│   ├── entity/
+│   ├── mapper/
+│   ├── repository/
+│   └── service/
+├── slot/
+│   ├── cache/
+│   ├── controller/
+│   ├── dto/
+│   ├── entity/
+│   ├── event/
+│   ├── repository/
+│   └── service/
+├── user/
+│   ├── entity/
+│   └── repository/
+├── security/
+│   ├── config/
+│   ├── filter/
+│   ├── handler/
+│   ├── model/
+│   └── service/
+├── common/
+│   ├── exception/
+│   └── openapi/
+└── config/
+```
+
+Controllers define the HTTP boundary, services own application workflows,
+repositories handle persistence, and entities represent persisted state.
+Feature-specific DTOs, mappers, events, and cache components remain within
+their owning feature.
+
 ## Local configuration
 
 The application reads these environment variables:

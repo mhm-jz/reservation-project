@@ -1,6 +1,6 @@
 package com.azki.reservation.common.exception;
 
-import com.azki.reservation.user.UserEntity;
+import com.azki.reservation.user.entity.UserEntity;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

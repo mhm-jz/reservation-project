@@ -1,6 +1,6 @@
 package com.azki.reservation.reservation.mapper;
 
-import com.azki.reservation.reservation.ReservationEntity;
+import com.azki.reservation.reservation.entity.ReservationEntity;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
