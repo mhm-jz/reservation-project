@@ -18,9 +18,8 @@ target/
 logs/
 
 ### Environment ###
-.env
-.env.*
-!.env.example
+.env.local
+.env.*.local
 
 ### Application secrets ###
 application-local.yml

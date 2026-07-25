@@ -5,13 +5,13 @@ services:
     restart: unless-stopped
 
     environment:
-      MYSQL_DATABASE: reservation_db
-      MYSQL_USER: reservation_user
-      MYSQL_PASSWORD: reservation_password
-      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-reservation_db}
+      MYSQL_USER: ${DB_USERNAME:-reservation_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set}
 
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
 
     healthcheck:
       test:
@@ -30,7 +30,7 @@ services:
     container_name: reservation-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
 
 volumes:
   reservation_mysql_data:

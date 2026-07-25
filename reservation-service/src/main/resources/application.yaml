@@ -3,28 +3,26 @@ spring:
     name: reservation-service
 
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/reservation_db?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/reservation_db?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
     username: ${DB_USERNAME:reservation_user}
-    password: ${DB_PASSWORD:reservation_password}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
     hibernate:
       ddl-auto: update
-      jdbc:
-        time_zone: UTC
-
-
 
     open-in-view: false
 
     properties:
       hibernate:
         format_sql: true
+        jdbc:
+          time_zone: UTC
 
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
       connect-timeout: 1s
       timeout: 1s
@@ -53,5 +51,5 @@ server:
 
 security:
   jwt:
-    secret: "PtKhd0onRsnE8SgZUO4Jp2eBWYd3DTg9llEQ5DcyM+M="
+    secret: ${JWT_SECRET}
     access-token-expiration: 1h
