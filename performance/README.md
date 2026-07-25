@@ -81,12 +81,12 @@ They are intentionally excluded from Git.
 
 ## Required tools
 
-- Java 17+
+- Java 21
 - Docker and Docker Compose
 - MySQL
 - Redis
 - k6
-- Maven or Maven Wrapper
+- Maven
 - Reservation Service running on port `8080`
 
 Check the environment:
@@ -95,7 +95,7 @@ Check the environment:
 java -version
 docker --version
 k6 version
-./mvnw -version
+mvn -version
 ```
 
 ## Start the shared infrastructure
@@ -129,7 +129,7 @@ Performance seeding is disabled by default. Enable it only when initially creati
 
 ```bash
 APP_PERFORMANCE_SEEDING_ENABLED=true \
-./mvnw -pl reservation-service spring-boot:run
+mvn -pl reservation-service spring-boot:run
 ```
 
 The seeder is duplicate-safe and skips an already complete dataset. It must not be enabled for normal benchmark runs.
@@ -138,7 +138,7 @@ The seeder is duplicate-safe and skips an already complete dataset. It must not 
 
 ```bash
 APP_PERFORMANCE_SEEDING_ENABLED=false \
-./mvnw -pl reservation-service spring-boot:run
+mvn -pl reservation-service spring-boot:run
 ```
 
 The default application address is:
@@ -172,10 +172,10 @@ Ensure runner files are executable:
 chmod +x performance/runners/*.sh
 ```
 
-Verify the application:
+Verify the application through the public API:
 
 ```bash
-curl -fsS http://127.0.0.1:8080/actuator/health
+curl -fsS   "http://127.0.0.1:8080/api/slots?from=2026-06-01T00:00:00&to=2026-07-01T00:00:00&limit=1"
 ```
 
 Verify Redis:
@@ -406,13 +406,18 @@ USER_PASSWORD=TestPassword123 \
 ./performance/runners/run-mixed-distributed.sh 20 50 100 200
 ```
 
-Generated files:
+Generated files include the workload, idempotency mode, and VU level:
 
 ```text
-results-mixed-distributed-vus-20.json
-results-mixed-distributed-vus-50.json
-results-mixed-distributed-vus-100.json
-results-mixed-distributed-vus-200.json
+mixed-distributed-idempotency-off-vu100.json
+mixed-distributed-idempotency-unique-vu100.json
+mixed-distributed-idempotency-retry-rate-0p10-vu100.json
+```
+
+When a threshold fails, the runner preserves the previous successful result and writes:
+
+```text
+mixed-distributed-idempotency-off-vu200-threshold-failed.json
 ```
 
 ---
@@ -443,13 +448,18 @@ USER_PASSWORD=TestPassword123 \
 ./performance/runners/run-mixed-hotspot.sh 20 50 100 200
 ```
 
-Generated files:
+Generated files include the workload, idempotency mode, and VU level:
 
 ```text
-results-mixed-hotspot-vus-20.json
-results-mixed-hotspot-vus-50.json
-results-mixed-hotspot-vus-100.json
-results-mixed-hotspot-vus-200.json
+mixed-hotspot-idempotency-off-vu100.json
+mixed-hotspot-idempotency-unique-vu100.json
+mixed-hotspot-idempotency-retry-rate-0p10-vu100.json
+```
+
+When a threshold fails, the runner preserves the previous successful result and writes:
+
+```text
+mixed-hotspot-idempotency-off-vu200-threshold-failed.json
 ```
 
 ## Mixed-runner cleanup behavior
@@ -470,6 +480,14 @@ Before each VU level, cleanup:
 6. clears only the three slot-cache Redis patterns documented above
 
 Seeded baseline reservations and non-performance user data are preserved.
+
+Redis keys are collected with `SCAN` and removed in configurable `UNLINK` batches instead of starting one Docker process per key:
+
+```text
+REDIS_UNLINK_BATCH_SIZE=500
+```
+
+Every k6 run first writes to a temporary file. A successful result is moved to the normal filename. Exit code `99` is treated as a threshold failure and stored using the `-threshold-failed.json` suffix, while a previous successful result is preserved.
 
 Use the optional final cleanup when required:
 
@@ -535,234 +553,189 @@ Different VUs execute concurrently. `200 VUs` does not mean exactly `200 request
 Benchmark date:
 
 ```text
-2026-07-24
+2026-07-25
 ```
 
-These are the verified results after making `GET /api/slots` public and removing login/JWT work from the read-only runners.
+The current reviewed result package contains 18 JSON exports:
+
+```text
+6 read-only results:
+- first page: 50, 100, and 200 VUs
+- deep cursor: 50, 100, and 200 VUs
+
+12 mixed results:
+- distributed and hotspot
+- idempotency off, unique, and retry
+- 100 and 200 VUs
+```
+
+All read-only results passed their configured thresholds. All distributed mixed results passed. Every hotspot result at 100 VUs passed. All three hotspot variants at 200 VUs crossed only the browse latency thresholds.
 
 ## First-page public read
 
-| VU | Avg | P95 | P99 | Max |
-|---:|---:|---:|---:|---:|
-| 20 | 12.52 ms | 16.56 ms | 20.59 ms | 170.59 ms |
-| 50 | 9.17 ms | 15.51 ms | 22.37 ms | 80.29 ms |
-| 100 | 7.78 ms | 13.73 ms | 18.42 ms | 45.89 ms |
-| 200 | 4.46 ms | 9.01 ms | 13.11 ms | 38.50 ms |
-
-At `200 VUs`:
-
-```text
-Measured page requests: 114,416
-Measured page request rate: 1,586.77 req/s
-Page error rate: 0%
-HTTP failure rate: 0%
-```
+| VU | Avg | P95 | P99 | Max | Page req/s | Errors |
+|---:|---:|---:|---:|---:|---:|---:|
+| 50 | 10.87 ms | 21.54 ms | 40.15 ms | 107.26 ms | 372.22 | 0% |
+| 100 | 8.04 ms | 17.56 ms | 23.33 ms | 41.34 ms | 765.80 | 0% |
+| 200 | 6.56 ms | 14.85 ms | 24.98 ms | 54.40 ms | 1,552.97 | 0% |
 
 Result:
 
 ```text
-All response checks passed.
-All configured thresholds passed.
-The public first-page Redis path remained fast at every tested VU level.
+P95 < 150 ms: passed at every tested level
+P99 < 200 ms: passed at every tested level
+HTTP failures: 0
+Response/check failures: 0
 ```
 
-The lower average at higher VU levels is likely influenced by a fully warmed cache, JVM/JIT warm-up, and local connection reuse. It must not be interpreted as a general rule that higher load improves latency.
-
----
+The first-page Redis path remained stable and fast at 200 VUs.
 
 ## Deep-cursor public read
 
-| VU | Avg | P95 | P99 | Max |
-|---:|---:|---:|---:|---:|
-| 20 | 17.85 ms | 26.97 ms | 33.56 ms | 43.09 ms |
-| 50 | 12.80 ms | 21.95 ms | 29.11 ms | 49.88 ms |
-| 100 | 9.86 ms | 18.79 ms | 36.29 ms | 165.00 ms |
-| 200 | 33.81 ms | 72.48 ms | 116.41 ms | 342.25 ms |
-
-At `200 VUs`:
-
-```text
-Measured page requests: 89,401
-Measured page request rate: 1,239.23 req/s
-Page error rate: 0%
-HTTP failure rate: 0%
-```
+| VU | Avg | P95 | P99 | Max | Page req/s | Errors |
+|---:|---:|---:|---:|---:|---:|---:|
+| 50 | 12.58 ms | 19.04 ms | 25.60 ms | 65.34 ms | 368.12 | 0% |
+| 100 | 11.17 ms | 18.33 ms | 30.66 ms | 133.36 ms | 746.68 | 0% |
+| 200 | 54.03 ms | 98.01 ms | 142.38 ms | 369.32 ms | 1,077.45 | 0% |
 
 Result:
 
 ```text
-All response and pagination checks passed.
-P95 and P99 thresholds passed at every level.
-Cursor-cache bypass remained intact.
+P95 < 150 ms: passed at every tested level
+P99 < 200 ms: passed at every tested level
+HTTP failures: 0
+Response/check failures: 0
 ```
 
-The maximum at `200 VUs` reached `342.25 ms`, so these results do not support a claim that every individual request always remains below `200 ms`. The important configured P95/P99 targets still passed.
-
----
+The `200 VU` maximum reached `369.32 ms`. Therefore, the results support the configured percentile targets but do not prove that every individual request always remains below `200 ms`. Adding a strict `max<200` threshold would make this specific run fail.
 
 ## Mixed distributed
 
-| VU | Journey/s | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 20 | 168.18 | 209.38 | 27.45 ms | 42.69 ms | 15.22 ms | 9.59 ms | 0.24% |
-| 50 | 440.03 | 551.76 | 6.91 ms | 16.21 ms | 9.36 ms | 9.02 ms | 0.10% |
-| 100 | 820.40 | 1,028.05 | 7.11 ms | 29.88 ms | 10.51 ms | 9.13 ms | 0.26% |
-| 200 | 1,381.02 | 1,723.88 | 31.05 ms | 38.73 ms | 22.84 ms | 23.69 ms | 1.23% |
+### Idempotency off
 
-### Distributed 200-VU operation counts
+| VU | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
+|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 991.73 | 16.30 ms | 36.50 ms | 16.85 ms | 14.17 ms | 0.53% |
+| 200 | 1,533.56 | 49.92 ms | 103.67 ms | 49.75 ms | 49.94 ms | 2.61% |
+
+### Unique idempotency keys
+
+| VU | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
+|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 992.10 | 13.04 ms | 33.61 ms | 19.09 ms | 14.02 ms | 0.51% |
+| 200 | 1,456.25 | 68.98 ms | 115.20 ms | 62.78 ms | 59.49 ms | 4.05% |
+
+### Retry idempotency mode
+
+| VU | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
+|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 993.41 | 20.19 ms | 38.83 ms | 24.84 ms | 17.15 ms | 0.72% |
+| 200 | 1,181.44 | 158.16 ms | 224.95 ms | 148.17 ms | 137.13 ms | 5.82% |
+
+All configured distributed thresholds passed. Across all six runs:
 
 ```text
-Journeys: 108,613
-HTTP requests: 135,578
-Reservation attempts: 21,529
-Successful reservations: 21,264
-Expected conflicts: 265
-Cancellation attempts: 5,236
-Successful cancellations: 5,236
-```
-
-Result:
-
-```text
-Browse errors: 0%
-Reservation technical errors: 0%
-Cancellation errors: 0%
 HTTP failure rate: 0%
-All configured thresholds passed.
-All attempted cancellations succeeded.
+Browse technical error rate: 0%
+Reservation technical error rate: 0%
+Cancellation error rate: 0%
+Failed response checks: 0
+All attempted cancellations succeeded
 ```
 
-This is the closest tested scenario to a normal high-throughput workload. At `200 VUs`, the system processed approximately `1,724 HTTP requests/s` while browse P95 remained approximately `31 ms`.
+The non-idempotent 200-VU distributed run reached approximately `1,534 HTTP req/s`. The unique-key mode remained close to that throughput. Retry mode performs extra replay requests and showed higher latency at 200 VUs, while still passing the mixed-workload thresholds.
 
----
+## Idempotency replay correctness
+
+| Workload | VU | Attempts | Successful | Failed | Mismatches | Replay P95 | Replay P99 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Distributed | 100 | 1,078 | 1,078 | 0 | 0 | 10.94 ms | 21.13 ms |
+| Distributed | 200 | 1,432 | 1,432 | 0 | 0 | 131.60 ms | 202.60 ms |
+| Hotspot | 100 | 395 | 395 | 0 | 0 | 68.66 ms | 88.37 ms |
+| Hotspot | 200 | 183 | 183 | 0 | 0 | 276.15 ms | 485.80 ms |
+
+Every replay returned the expected original response snapshot. No replay failure, response mismatch, or cleanup failure was recorded.
 
 ## Mixed hotspot
 
-| VU | Journey/s | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 20 | 167.56 | 209.89 | 48.14 ms | 70.71 ms | 10.57 ms | 8.33 ms | 5.33% |
-| 50 | 406.95 | 507.40 | 44.27 ms | 52.31 ms | 7.22 ms | 7.06 ms | 6.36% |
-| 100 | 469.12 | 578.84 | 157.71 ms | 176.99 ms | 72.01 ms | 66.60 ms | 32.19% |
-| 200 | 335.31 | 410.91 | 366.72 ms | 538.33 ms | 265.35 ms | 271.34 ms | 66.22% |
+### 100 VUs
 
-### Hotspot 200-VU operation counts
+| Idempotency | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
+|---|---:|---:|---:|---:|---:|---:|
+| Off | 496.81 | 181.66 ms | 221.37 ms | 90.91 ms | 88.51 ms | 35.21% |
+| Unique | 515.80 | 175.78 ms | 220.95 ms | 91.64 ms | 83.13 ms | 36.07% |
+| Retry | 534.74 | 168.27 ms | 194.34 ms | 84.30 ms | 78.00 ms | 35.97% |
 
-```text
-Journeys: 26,527
-HTTP requests: 32,508
-Reservation attempts: 5,328
-Successful reservations: 1,800
-Expected conflicts: 3,528
-Cancellation attempts: 453
-Successful cancellations: 453
-```
+All configured thresholds passed at 100 VUs.
 
-Result:
+### 200 VUs
 
-```text
-Technical error rate: 0%
-HTTP failure rate: 0%
-Reservation correctness remained intact.
-All attempted cancellations succeeded.
-```
+| Idempotency | HTTP req/s | Browse P95 | Browse P99 | Reserve P95 | Cancel P95 | Conflict rate |
+|---|---:|---:|---:|---:|---:|---:|
+| Off | 410.34 | 429.60 ms | 591.19 ms | 377.32 ms | 370.55 ms | 66.52% |
+| Unique | 410.86 | 407.98 ms | 574.03 ms | 327.00 ms | 302.90 ms | 66.62% |
+| Retry | 413.22 | 396.05 ms | 579.69 ms | 310.42 ms | 379.37 ms | 66.61% |
 
-At `200 VUs`, the browse thresholds failed:
+All three 200-VU hotspot runs crossed:
 
 ```text
-Browse P95 target: < 250 ms
-Observed: 366.72 ms
-
-Browse P99 target: < 500 ms
-Observed: 538.33 ms
+Browse P95 < 250 ms
+Browse P99 < 500 ms
 ```
 
-Throughput also fell from approximately `579 HTTP req/s` at `100 VUs` to `411 HTTP req/s` at `200 VUs`. Rising latency together with falling throughput indicates saturation under this artificial worst-case hotspot.
+No technical errors or failed checks occurred. Reservation, cancellation, journey, and error-rate thresholds remained valid. The approximately `66.6%` expected-conflict rate confirms that this workload generated severe competition over the same slot set.
 
-The high conflict rate is expected because all users repeatedly compete for the same limited slot set.
-
----
-
-# Effect of making GET /api/slots public
-
-The before/after comparison below uses the same `200 VU` read-only scenarios.
-
-## First-page 200 VUs
-
-| Metric | Before: JWT required | After: public, no JWT | Change |
-|---|---:|---:|---:|
-| Avg | 4.53 ms | 4.46 ms | 1.5% lower |
-| P95 | 9.25 ms | 9.01 ms | 2.6% lower |
-| P99 | 14.70 ms | 13.11 ms | 10.8% lower |
-| Max | 56.23 ms | 38.50 ms | 31.5% lower |
-| Measured page req/s | 1,583.51 | 1,586.77 | effectively stable |
-| Data sent | 37.79 MB | 16.72 MB | 55.7% lower |
-
-## Deep cursor 200 VUs
-
-| Metric | Before: JWT required | After: public, no JWT | Change |
-|---|---:|---:|---:|
-| Avg | 53.70 ms | 33.81 ms | 37.0% lower |
-| P95 | 113.55 ms | 72.48 ms | 36.2% lower |
-| P99 | 174.21 ms | 116.41 ms | 33.2% lower |
-| Max | 472.68 ms | 342.25 ms | 27.6% lower |
-| Measured page req/s | 1,077.22 | 1,239.23 | 15.0% higher |
-| Data sent | 31.39 MB | 19.48 MB | 37.9% lower |
-
-The new read-only exports contain no authentication setup data because they do not perform login or token extraction.
-
-The improvement in data sent is directly consistent with removing login traffic and bearer headers. Latency and throughput also improved or remained stable, but local JVM, cache, connection-pool, MySQL, and machine conditions can influence benchmark variation. Therefore, the full deep-cursor improvement must not be attributed solely to JWT removal.
-
-The mixed hotspot result at `200 VUs` remained effectively unchanged before and after this API-security change. That indicates the hotspot saturation is driven by contention, write operations, cache invalidation, and rebuild pressure rather than JWT parsing on isolated slot reads.
-
----
+The combination of increasing latency and lower throughput compared with 100 VUs indicates saturation under the deliberately artificial hotspot workload. This does not indicate a race-condition failure: one user wins a contested slot and the remaining requests receive supported business conflicts.
 
 # Overall assessment
 
 | Area | Result |
 |---|---|
-| Public `GET /api/slots` contract | Verified |
-| Read-only runners without login/JWT | Verified |
-| First-page Redis cache | Passed; strong performance |
-| Deep cursor up to 200 VUs | P95/P99 passed; some maximum outliers above 200 ms |
-| Mixed distributed up to 200 VUs | Passed; strong and realistic result |
-| Mixed hotspot up to 100 VUs | Passed |
-| Mixed hotspot at 200 VUs | Saturated; browse thresholds failed |
-| Technical errors | 0% in all verified post-change runs |
+| First-page reads through Redis | Passed through 200 VUs |
+| Deep keyset/cursor reads | P95/P99 passed through 200 VUs |
+| Deep cursor strict maximum below 200 ms | Not demonstrated |
+| Distributed mixed workload | All modes passed through 200 VUs |
+| Hotspot mixed workload | Passed at 100 VUs; browse saturated at 200 VUs |
+| Technical error rates | 0% in every reviewed result |
+| Response checks | No failures |
 | Reservation concurrency correctness | Preserved |
-| Successful cancellation rate | 100% for attempted cancellations |
+| Cancellation correctness | Every attempted cancellation succeeded |
+| Idempotency replay | 100% successful; no mismatches |
 
 A defensible conclusion is:
 
-> On a dataset containing 1.2 million slots, the public first-page, public deep-cursor, and realistic mixed distributed workloads completed at up to 200 concurrent VUs without technical errors. Their key P95/P99 response times remained below 200 ms. The artificial 200-VU hotspot reached saturation because all users repeatedly competed for the same limited slot set, while reservation and cancellation correctness remained intact.
+> On the reviewed local dataset containing 1.2 million slots, first-page Redis reads, deep cursor reads, and all distributed mixed workloads passed their configured P95/P99 and correctness thresholds through 200 concurrent VUs without technical errors. The intentionally adversarial hotspot remained correct but crossed browse-latency thresholds at 200 VUs because repeated writes and cache invalidations concentrated on the same slot set.
 
-The implementation must not claim that every request in every scenario always stays below `200 ms`, because deep-cursor maximum outliers and the artificial hotspot exceed that value.
+The implementation must not claim that every individual request in every scenario is always below `200 ms`, because the deep-cursor maximum and 200-VU hotspot results exceed that value.
 
 ---
 
 # Result files
 
-The standard verified suite contains 16 result files:
+The reviewed suite contains 18 result files:
 
 ```text
-results-first-vus-20.json
 results-first-vus-50.json
 results-first-vus-100.json
 results-first-vus-200.json
 
-results-deep-vus-20.json
 results-deep-vus-50.json
 results-deep-vus-100.json
 results-deep-vus-200.json
 
-results-mixed-distributed-vus-20.json
-results-mixed-distributed-vus-50.json
-results-mixed-distributed-vus-100.json
-results-mixed-distributed-vus-200.json
+mixed-distributed-idempotency-off-vu100.json
+mixed-distributed-idempotency-off-vu200.json
+mixed-distributed-idempotency-unique-vu100.json
+mixed-distributed-idempotency-unique-vu200.json
+mixed-distributed-idempotency-retry-rate-0p10-vu100.json
+mixed-distributed-idempotency-retry-rate-0p10-vu200.json
 
-results-mixed-hotspot-vus-20.json
-results-mixed-hotspot-vus-50.json
-results-mixed-hotspot-vus-100.json
-results-mixed-hotspot-vus-200.json
+mixed-hotspot-idempotency-off-vu100.json
+mixed-hotspot-idempotency-off-vu200-threshold-failed.json
+mixed-hotspot-idempotency-unique-vu100.json
+mixed-hotspot-idempotency-unique-vu200-threshold-failed.json
+mixed-hotspot-idempotency-retry-rate-0p10-vu100.json
+mixed-hotspot-idempotency-retry-rate-0p10-vu200-threshold-failed.json
 ```
 
 Raw result files must not be committed.
@@ -779,7 +752,7 @@ Sanitize every result before sharing or archiving it:
 rm -rf performance/results/sanitized
 mkdir -p performance/results/sanitized
 
-for file in performance/results/results-*.json; do
+for file in performance/results/*.json; do
   jq 'del(.setup_data)' \
     "$file" \
     > "performance/results/sanitized/$(basename "$file")"
