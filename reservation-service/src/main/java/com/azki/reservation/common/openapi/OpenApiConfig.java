@@ -95,12 +95,16 @@ public class OpenApiConfig {
                 .addResponses(
                         "ReservationBadRequest",
                         errorResponse(
-                                "Reservation request validation failed",
-                                Map.of(
+                                "Reservation request or Idempotency-Key is invalid",
+                                orderedExamples(
                                         "validationError",
                                         errorExample(
                                                 ErrorCode.VALIDATION_ERROR,
                                                 "slotId: must be greater than 0"
+                                        ),
+                                        "invalidIdempotencyKey",
+                                        errorExample(
+                                                ErrorCode.INVALID_IDEMPOTENCY_KEY
                                         )
                                 )
                         )
@@ -166,17 +170,16 @@ public class OpenApiConfig {
                 .addResponses(
                         "ReservationCancellationNotFound",
                         errorResponse(
-                                "The reservation or its slot was not found",
-                                orderedExamples(
+                                """
+                                        The reservation does not exist, was
+                                        already cancelled, or is not owned by
+                                        the authenticated user
+                                        """,
+                                Map.of(
                                         "reservationNotFound",
                                         errorExample(
                                                 ErrorCode.RESERVATION_NOT_FOUND,
                                                 "Reservation not found: 42"
-                                        ),
-                                        "slotNotFound",
-                                        errorExample(
-                                                ErrorCode.SLOT_NOT_FOUND,
-                                                "Slot not found: 42"
                                         )
                                 )
                         )
@@ -211,6 +214,11 @@ public class OpenApiConfig {
                                         errorExample(
                                                 ErrorCode.SLOT_UNAVAILABLE,
                                                 "Slot is no longer available: 42"
+                                        ),
+                                        "idempotencyKeyReused",
+                                        errorExample(
+                                                ErrorCode.IDEMPOTENCY_KEY_REUSED,
+                                                "Idempotency-Key was already used for a different request"
                                         )
                                 )
                         )
@@ -218,11 +226,15 @@ public class OpenApiConfig {
                 .addResponses(
                         "InternalServerError",
                         errorResponse(
-                                "The reservation state is inconsistent",
-                                Map.of(
+                                "The server could not complete the request",
+                                orderedExamples(
                                         "reservationStateError",
                                         errorExample(
                                                 ErrorCode.RESERVATION_STATE_ERROR
+                                        ),
+                                        "internalServerError",
+                                        errorExample(
+                                                ErrorCode.INTERNAL_SERVER_ERROR
                                         )
                                 )
                         )

@@ -3,7 +3,10 @@ package com.azki.reservation.slot;
 import com.azki.reservation.slot.dto.SlotPageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Min;
@@ -39,24 +42,38 @@ public class SlotController {
     @Operation(
             summary = "List available reservation slots",
             description = """
-                    Returns available slots inside the requested time range.
-
-                    Results are ordered by start time and ID.
-                    Cursor-based pagination is used to retrieve the next page.
+                    Lists slots in `[from, to)`, ordered by `startTime`, then
+                    `id`. Omit `cursor` for page one; pass `nextCursor`
+                    unchanged for the next page.
                     """
     )
-    @ApiResponse(
-            responseCode = "400",
-            ref = "#/components/responses/SlotQueryBadRequest"
-    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Page of available slots",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = SlotPageResponse.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    ref = "#/components/responses/SlotQueryBadRequest"
+            )
+    })
     public SlotPageResponse getAvailableSlots(
             @RequestParam
             @NotNull
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             @Parameter(
-                    description = "Inclusive start of the requested time range",
+                    description = "Inclusive local ISO-8601 start time",
                     required = true,
-                    example = "2026-07-01T00:00:00"
+                    example = "2026-07-01T00:00:00",
+                    schema = @Schema(
+                            type = "string",
+                            format = "date-time"
+                    )
             )
             LocalDateTime from,
 
@@ -64,9 +81,13 @@ public class SlotController {
             @NotNull
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             @Parameter(
-                    description = "Exclusive end of the requested time range",
+                    description = "Exclusive local ISO-8601 end time; maximum range is 30 days",
                     required = true,
-                    example = "2026-07-31T00:00:00"
+                    example = "2026-07-31T00:00:00",
+                    schema = @Schema(
+                            type = "string",
+                            format = "date-time"
+                    )
             )
             LocalDateTime to,
 
@@ -76,14 +97,19 @@ public class SlotController {
             )
             @Min(1)
             @Parameter(
-                    description = "Maximum number of slots to return",
-                    example = "20"
+                    description = "Page size; defaults to 20",
+                    example = "20",
+                    schema = @Schema(
+                            minimum = "1",
+                            maximum = "100",
+                            defaultValue = "20"
+                    )
             )
             int limit,
 
             @RequestParam(required = false)
             @Parameter(
-                    description = "Opaque cursor returned by the previous page",
+                    description = "Opaque URL-safe Base64 `nextCursor`; pass unchanged. Invalid cursors return 400.",
                     example = "eyJzdGFydFRpbWUiOiIyMDI2LTA3LTAxVDEwOjAwOjAwIiwiaWQiOjEyM30"
             )
             String cursor
