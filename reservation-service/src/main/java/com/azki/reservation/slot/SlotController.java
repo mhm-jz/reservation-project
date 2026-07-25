@@ -42,9 +42,9 @@ public class SlotController {
     @Operation(
             summary = "List available reservation slots",
             description = """
-                    Lists slots in `[from, to)`, ordered by `startTime`, then
-                    `id`. Omit `cursor` for page one; pass `nextCursor`
-                    unchanged for the next page.
+                    UTC LocalDateTime values without an offset. Lists slots in
+                    `[from, to)`, ordered by `startTime`, then `id`. Omit
+                    `cursor` for page one; pass `nextCursor` unchanged.
                     """
     )
     @ApiResponses({
@@ -67,7 +67,7 @@ public class SlotController {
             @NotNull
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             @Parameter(
-                    description = "Inclusive local ISO-8601 start time",
+                    description = "Inclusive UTC date-time without an offset",
                     required = true,
                     example = "2026-07-01T00:00:00",
                     schema = @Schema(
@@ -81,7 +81,7 @@ public class SlotController {
             @NotNull
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             @Parameter(
-                    description = "Exclusive local ISO-8601 end time; maximum range is 30 days",
+                    description = "Exclusive UTC date-time without an offset; maximum range is 30 days",
                     required = true,
                     example = "2026-07-31T00:00:00",
                     schema = @Schema(
@@ -109,7 +109,7 @@ public class SlotController {
 
             @RequestParam(required = false)
             @Parameter(
-                    description = "Opaque URL-safe Base64 `nextCursor`; pass unchanged. Invalid cursors return 400.",
+                    description = "Opaque cursor containing the same UTC LocalDateTime representation; pass unchanged",
                     example = "eyJzdGFydFRpbWUiOiIyMDI2LTA3LTAxVDEwOjAwOjAwIiwiaWQiOjEyM30"
             )
             String cursor

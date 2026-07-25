@@ -21,6 +21,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Locale;
 
 @Service
@@ -32,6 +34,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final UserMapper userMapper;
+    private final Clock clock;
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
@@ -104,7 +107,12 @@ public class AuthService {
             String rawPassword
     ) {
         String passwordHash = passwordEncoder.encode(rawPassword);
-        return new UserEntity(username, email, passwordHash);
+        return new UserEntity(
+                username,
+                email,
+                passwordHash,
+                LocalDateTime.now(clock)
+        );
     }
 
     private UserEntity loadUser(Long userId) {

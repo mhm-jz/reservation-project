@@ -30,6 +30,10 @@ With the application running, Swagger UI is available at
 `http://127.0.0.1:8080/swagger-ui/index.html` and the OpenAPI JSON document at
 `http://127.0.0.1:8080/v3/api-docs`.
 
+All API and database `LocalDateTime` values use UTC by convention and are
+serialized without a `Z` or numeric offset. JDBC and Hibernate configure MySQL
+sessions for UTC.
+
 An authenticated reservation can use an optional idempotency key:
 
 ```shell

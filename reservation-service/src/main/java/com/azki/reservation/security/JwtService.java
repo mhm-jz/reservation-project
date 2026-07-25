@@ -9,6 +9,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Date;
 
@@ -17,9 +18,14 @@ public class JwtService {
 
     private final JwtProperties jwtProperties;
     private final SecretKey signingKey;
+    private final Clock clock;
 
-    public JwtService(JwtProperties jwtProperties) {
+    public JwtService(
+            JwtProperties jwtProperties,
+            Clock clock
+    ) {
         this.jwtProperties = jwtProperties;
+        this.clock = clock;
 
         byte[] keyBytes = Decoders.BASE64.decode(
                 jwtProperties.secret()
@@ -30,7 +36,7 @@ public class JwtService {
 
     public String generateToken(AuthenticatedUser user) {
 
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
 
         Instant expiration = now.plus(
                 jwtProperties.accessTokenExpiration()

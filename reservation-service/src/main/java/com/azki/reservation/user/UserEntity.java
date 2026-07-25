@@ -67,15 +67,12 @@ public class UserEntity {
     public UserEntity(
             String username,
             String email,
-            String passwordHash
+            String passwordHash,
+            LocalDateTime createdAt
     ) {
         this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
-    }
-
-    @PrePersist
-    void prePersist() {
-        createdAt = LocalDateTime.now();
+        this.createdAt = createdAt;
     }
 }

@@ -19,6 +19,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -33,13 +34,14 @@ public class ReservationService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final ReservationMapper reservationMapper;
+    private final Clock clock;
 
     @Transactional
     public ReservationResponse createReservation(
             Long slotId,
             Long userId
     ) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         ReservationCreationResult result =
                 executeReservationCreation(slotId, userId, now);
 
@@ -53,7 +55,7 @@ public class ReservationService {
             Long userId,
             UUID idempotencyKey
     ) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         String key = idempotencyKey.toString();
         int claimed = idempotencyRepository.claim(
                 userId,
@@ -97,7 +99,7 @@ public class ReservationService {
 
         AvailableSlotEntity slot = loadSlot(slotId);
         ReservationEntity reservation =
-                buildReservation(userId, slot);
+                buildReservation(userId, slot, now);
         ReservationEntity savedReservation =
                 reservationRepository.save(reservation);
 
@@ -218,10 +220,11 @@ public class ReservationService {
 
     private ReservationEntity buildReservation(
             Long userId,
-            AvailableSlotEntity slot
+            AvailableSlotEntity slot,
+            LocalDateTime createdAt
     ) {
         UserEntity user = userRepository.getReferenceById(userId);
-        return new ReservationEntity(user, slot);
+        return new ReservationEntity(user, slot, createdAt);
     }
 
     private void publishSlotAvailabilityChanged(

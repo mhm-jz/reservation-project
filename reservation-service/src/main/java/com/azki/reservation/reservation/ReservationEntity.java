@@ -50,14 +50,11 @@ public class ReservationEntity {
 
     public ReservationEntity(
             UserEntity user,
-            AvailableSlotEntity slot
+            AvailableSlotEntity slot,
+            LocalDateTime createdAt
     ) {
         this.user = user;
         this.slot = slot;
-    }
-
-    @PrePersist
-    void prePersist() {
-        createdAt = LocalDateTime.now();
+        this.createdAt = createdAt;
     }
 }

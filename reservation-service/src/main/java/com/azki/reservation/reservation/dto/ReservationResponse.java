@@ -19,19 +19,19 @@ public record ReservationResponse(
         Long userId,
 
         @Schema(
-                description = "Slot start time",
+                description = "UTC slot start time without an offset",
                 example = "2026-07-28T10:00:00"
         )
         LocalDateTime startTime,
 
         @Schema(
-                description = "Slot end time",
+                description = "UTC slot end time without an offset",
                 example = "2026-07-28T10:30:00"
         )
         LocalDateTime endTime,
 
         @Schema(
-                description = "Creation time",
+                description = "UTC creation time without an offset",
                 example = "2026-07-25T14:15:30"
         )
         LocalDateTime createdAt

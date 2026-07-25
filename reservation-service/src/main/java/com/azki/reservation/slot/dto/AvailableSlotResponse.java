@@ -13,13 +13,13 @@ public record AvailableSlotResponse(
         Long id,
 
         @Schema(
-                description = "Slot start time",
+                description = "UTC slot start time without an offset",
                 example = "2026-07-28T10:00:00"
         )
         LocalDateTime startTime,
 
         @Schema(
-                description = "Slot end time",
+                description = "UTC slot end time without an offset",
                 example = "2026-07-28T10:30:00"
         )
         LocalDateTime endTime

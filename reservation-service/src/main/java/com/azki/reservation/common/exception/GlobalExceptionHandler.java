@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.Clock;
 import java.time.Instant;
 
 @RestControllerAdvice
@@ -18,6 +19,12 @@ public class GlobalExceptionHandler {
 
     private static final Logger log =
             LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    private final Clock clock;
+
+    public GlobalExceptionHandler(Clock clock) {
+        this.clock = clock;
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(
@@ -105,7 +112,7 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(
                         errorCode.name(),
                         message,
-                        Instant.now()
+                        Instant.now(clock)
                 ));
     }
 

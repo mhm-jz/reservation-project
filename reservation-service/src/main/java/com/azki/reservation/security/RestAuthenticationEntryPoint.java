@@ -13,6 +13,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.time.Instant;
 
 @Component
@@ -21,6 +22,7 @@ public class RestAuthenticationEntryPoint
         implements AuthenticationEntryPoint {
 
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     @Override
     public void commence(
@@ -33,7 +35,7 @@ public class RestAuthenticationEntryPoint
         ErrorResponse error = new ErrorResponse(
                 errorCode.name(),
                 errorCode.getDefaultMessage(),
-                Instant.now()
+                Instant.now(clock)
         );
 
         response.setStatus(errorCode.getHttpStatus().value());

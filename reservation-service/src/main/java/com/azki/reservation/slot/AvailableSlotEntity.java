@@ -43,7 +43,8 @@ public class AvailableSlotEntity {
 
     public AvailableSlotEntity(
             LocalDateTime startTime,
-            LocalDateTime endTime
+            LocalDateTime endTime,
+            LocalDateTime createdAt
     ) {
         if (!endTime.isAfter(startTime)) {
             throw new IllegalArgumentException(
@@ -54,10 +55,6 @@ public class AvailableSlotEntity {
         this.startTime = startTime;
         this.endTime = endTime;
         this.reserved = false;
-    }
-
-    @PrePersist
-    void prePersist() {
-        createdAt = LocalDateTime.now();
+        this.createdAt = createdAt;
     }
 }
