@@ -24,11 +24,3 @@ logs/
 ### Application secrets ###
 application-local.yml
 application-secret.yml
-
-# Generated performance-test artifacts
-performance/results/*
-!performance/results/.gitkeep
-
-performance/**/*.zip
-performance/**/*.log
-performance/**/tmp/

@@ -41,10 +41,6 @@ app:
     lock-retry-delays:
       - 25ms
       - 50ms
-  performance-seeding:
-    enabled: ${APP_PERFORMANCE_SEEDING_ENABLED:false}
-    user-password: ${APP_PERFORMANCE_USER_PASSWORD:TestPassword123}
-    batch-size: 5000
 
 server:
   port: ${SERVER_PORT:8080}
