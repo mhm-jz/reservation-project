@@ -1,13 +1,20 @@
 package com.azki.reservation;
 
+import com.azki.reservation.config.JwtProperties;
+import com.azki.reservation.config.SlotCacheProperties;
+import com.azki.reservation.config.SlotSearchProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 import java.util.TimeZone;
 
 @SpringBootApplication
-@ConfigurationPropertiesScan
+@EnableConfigurationProperties({
+        JwtProperties.class,
+        SlotCacheProperties.class,
+        SlotSearchProperties.class
+})
 public class ReservationServiceApplication {
 
     public static void main(String[] args) {
