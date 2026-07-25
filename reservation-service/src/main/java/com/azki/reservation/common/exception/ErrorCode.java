@@ -36,6 +36,14 @@ public enum ErrorCode {
             HttpStatus.CONFLICT,
             "Slot is no longer available"
     ),
+    INVALID_IDEMPOTENCY_KEY(
+            HttpStatus.BAD_REQUEST,
+            "Idempotency-Key must be a valid UUID"
+    ),
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.CONFLICT,
+            "Idempotency-Key was already used for a different request"
+    ),
     RESERVATION_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "Reservation not found"

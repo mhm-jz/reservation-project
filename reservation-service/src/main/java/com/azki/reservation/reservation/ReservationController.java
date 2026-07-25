@@ -1,5 +1,6 @@
 package com.azki.reservation.reservation;
 
+import com.azki.reservation.common.exception.InvalidIdempotencyKeyException;
 import com.azki.reservation.reservation.dto.CreateReservationRequest;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import com.azki.reservation.security.AuthenticatedUser;
@@ -13,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/reservations")
@@ -45,12 +48,27 @@ public class ReservationController {
 
             @Parameter(hidden = true)
             @AuthenticationPrincipal
-            AuthenticatedUser authenticatedUser
+            AuthenticatedUser authenticatedUser,
+
+            @RequestHeader(
+                    value = "Idempotency-Key",
+                    required = false
+            )
+            String idempotencyKey
     ) {
-        return reservationService.createReservation(
-                request.slotId(),
-                authenticatedUser.getId()
-        );
+        UUID parsedIdempotencyKey =
+                parseIdempotencyKey(idempotencyKey);
+
+        return parsedIdempotencyKey == null
+                ? reservationService.createReservation(
+                        request.slotId(),
+                        authenticatedUser.getId()
+                )
+                : reservationService.createReservation(
+                        request.slotId(),
+                        authenticatedUser.getId(),
+                        parsedIdempotencyKey
+                );
     }
 
     @DeleteMapping("/{reservationId}")
@@ -78,5 +96,24 @@ public class ReservationController {
                 reservationId,
                 authenticatedUser.getId()
         );
+    }
+
+    private UUID parseIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null) {
+            return null;
+        }
+        if (idempotencyKey.isBlank()) {
+            throw new InvalidIdempotencyKeyException();
+        }
+
+        try {
+            UUID parsed = UUID.fromString(idempotencyKey);
+            if (!parsed.toString().equalsIgnoreCase(idempotencyKey)) {
+                throw new InvalidIdempotencyKeyException();
+            }
+            return parsed;
+        } catch (IllegalArgumentException exception) {
+            throw new InvalidIdempotencyKeyException(exception);
+        }
     }
 }

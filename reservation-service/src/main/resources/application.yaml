@@ -3,7 +3,7 @@ spring:
     name: reservation-service
 
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/reservation_db?rewriteBatchedStatements=true}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/reservation_db?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
     username: ${DB_USERNAME:reservation_user}
     password: ${DB_PASSWORD:reservation_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -11,6 +11,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+      jdbc:
+        time_zone: UTC
+
+
 
     open-in-view: false
 

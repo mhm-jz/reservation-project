@@ -1,5 +1,6 @@
 package com.azki.reservation.reservation;
 
+import com.azki.reservation.common.exception.IdempotencyKeyReusedException;
 import com.azki.reservation.common.exception.ReservationNotFoundException;
 import com.azki.reservation.common.exception.ReservationStateException;
 import com.azki.reservation.common.exception.SlotAlreadyReservedException;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -26,12 +28,64 @@ public class ReservationService {
 
     private final AvailableSlotRepository slotRepository;
     private final ReservationRepository reservationRepository;
+    private final ReservationIdempotencyRepository idempotencyRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final ReservationMapper reservationMapper;
 
     @Transactional
     public ReservationResponse createReservation(
+            Long slotId,
+            Long userId
+    ) {
+        ReservationCreationResult result =
+                executeReservationCreation(slotId, userId);
+
+        publishSlotAvailabilityChanged(result.slotDay());
+        return result.response();
+    }
+
+    @Transactional
+    public ReservationResponse createReservation(
+            Long slotId,
+            Long userId,
+            UUID idempotencyKey
+    ) {
+        String key = idempotencyKey.toString();
+        int claimed = idempotencyRepository.claim(
+                userId,
+                key,
+                slotId,
+                LocalDateTime.now()
+        );
+
+        if (claimed == 0) {
+            return replayReservation(userId, key, slotId);
+        }
+
+        ReservationCreationResult result =
+                executeReservationCreation(slotId, userId);
+        ReservationResponse response = result.response();
+
+        int completed = idempotencyRepository.complete(
+                userId,
+                key,
+                response.id(),
+                response.startTime(),
+                response.endTime(),
+                response.createdAt()
+        );
+        if (completed != 1) {
+            throw new IllegalStateException(
+                    "Could not store reservation idempotency result"
+            );
+        }
+
+        publishSlotAvailabilityChanged(result.slotDay());
+        return loadIdempotency(userId, key).toResponse();
+    }
+
+    private ReservationCreationResult executeReservationCreation(
             Long slotId,
             Long userId
     ) {
@@ -44,8 +98,39 @@ public class ReservationService {
         ReservationEntity savedReservation =
                 reservationRepository.save(reservation);
 
-        publishSlotAvailabilityChanged(slot);
-        return reservationMapper.toResponse(savedReservation);
+        return new ReservationCreationResult(
+                reservationMapper.toResponse(savedReservation),
+                slot.getStartTime().toLocalDate()
+        );
+    }
+
+    private ReservationResponse replayReservation(
+            Long userId,
+            String idempotencyKey,
+            Long requestedSlotId
+    ) {
+        ReservationIdempotencyEntity idempotency =
+                loadIdempotency(userId, idempotencyKey);
+
+        if (!idempotency.hasSlotId(requestedSlotId)) {
+            throw new IdempotencyKeyReusedException();
+        }
+
+        return idempotency.toResponse();
+    }
+
+    private ReservationIdempotencyEntity loadIdempotency(
+            Long userId,
+            String idempotencyKey
+    ) {
+        return idempotencyRepository
+                .findByUserIdAndIdempotencyKey(
+                        userId,
+                        idempotencyKey
+                )
+                .orElseThrow(() -> new IllegalStateException(
+                        "Reservation idempotency claim was not found"
+                ));
     }
 
     private void reserveSlotOrThrow(
@@ -142,5 +227,11 @@ public class ReservationService {
         eventPublisher.publishEvent(
                 new SlotAvailabilityChangedEvent(day)
         );
+    }
+
+    private record ReservationCreationResult(
+            ReservationResponse response,
+            LocalDate slotDay
+    ) {
     }
 }

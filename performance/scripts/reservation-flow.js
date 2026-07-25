@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import crypto from 'k6/crypto';
 import {check, fail, sleep} from 'k6';
 import {Counter, Rate, Trend} from 'k6/metrics';
 
@@ -20,6 +21,11 @@ const BASE_URL =
 const from = __ENV.FROM || '2026-08-01T00:00:00';
 const to = __ENV.TO || '2026-08-31T00:00:00';
 const workloadMode = __ENV.WORKLOAD_MODE || 'hotspot';
+const idempotencyMode =
+    __ENV.IDEMPOTENCY_MODE || 'off';
+const idempotencyRetryRate = Number(
+    __ENV.IDEMPOTENCY_RETRY_RATE || 0.10
+);
 
 const targetVus = Number(__ENV.TARGET_VUS || 20);
 const testDuration = __ENV.TEST_DURATION || '60s';
@@ -95,6 +101,87 @@ const journeyOperations = new Counter(
     'journey_operations'
 );
 
+const mixedReservationIdempotentUniqueDuration = new Trend(
+    'mixed_reservation_idempotent_unique_duration',
+    true
+);
+const mixedReservationIdempotentFirstDuration = new Trend(
+    'mixed_reservation_idempotent_first_duration',
+    true
+);
+const mixedReservationIdempotentReplayDuration = new Trend(
+    'mixed_reservation_idempotent_replay_duration',
+    true
+);
+const mixedReservationIdempotentJourneyDuration = new Trend(
+    'mixed_reservation_idempotent_journey_duration',
+    true
+);
+const mixedIdempotencyKeysSent = new Counter(
+    'mixed_idempotency_keys_sent'
+);
+const mixedIdempotencyReplaysAttempted = new Counter(
+    'mixed_idempotency_replays_attempted'
+);
+const mixedIdempotencyReplaysSucceeded = new Counter(
+    'mixed_idempotency_replays_succeeded'
+);
+const mixedIdempotencyReplaysFailed = new Rate(
+    'mixed_idempotency_replays_failed'
+);
+const mixedIdempotencyResponseMismatches = new Rate(
+    'mixed_idempotency_response_mismatches'
+);
+const mixedIdempotencyCleanupFailures = new Rate(
+    'mixed_idempotency_cleanup_failures'
+);
+
+const thresholds = {
+    slot_browse_duration: [
+        'p(95)<250',
+        'p(99)<500',
+    ],
+    reservation_duration: [
+        'p(95)<500',
+        'p(99)<750',
+    ],
+    cancellation_duration: [
+        'p(95)<500',
+        'p(99)<750',
+    ],
+    journey_duration: [
+        'p(95)<1000',
+        'p(99)<1500',
+    ],
+    slot_browse_error_rate: [
+        'rate<0.01',
+    ],
+    reservation_technical_error_rate: [
+        'rate<0.01',
+    ],
+    cancellation_error_rate: [
+        'rate<0.01',
+    ],
+    http_req_failed: [
+        'rate<0.01',
+    ],
+};
+
+if (idempotencyMode === 'retry') {
+    thresholds.mixed_idempotency_replays_failed = [
+        'rate==0',
+    ];
+    thresholds.mixed_idempotency_response_mismatches = [
+        'rate==0',
+    ];
+    thresholds.mixed_idempotency_cleanup_failures = [
+        'rate==0',
+    ];
+    thresholds.reservation_technical_error_rate = [
+        'rate==0',
+    ];
+}
+
 export const options = {
     scenarios: {
         mixed_workload: {
@@ -104,36 +191,7 @@ export const options = {
             duration: testDuration,
         },
     },
-    thresholds: {
-        slot_browse_duration: [
-            'p(95)<250',
-            'p(99)<500',
-        ],
-        reservation_duration: [
-            'p(95)<500',
-            'p(99)<750',
-        ],
-        cancellation_duration: [
-            'p(95)<500',
-            'p(99)<750',
-        ],
-        journey_duration: [
-            'p(95)<1000',
-            'p(99)<1500',
-        ],
-        slot_browse_error_rate: [
-            'rate<0.01',
-        ],
-        reservation_technical_error_rate: [
-            'rate<0.01',
-        ],
-        cancellation_error_rate: [
-            'rate<0.01',
-        ],
-        http_req_failed: [
-            'rate<0.01',
-        ],
-    },
+    thresholds,
     summaryTrendStats: [
         'avg',
         'med',
@@ -239,19 +297,69 @@ export function mixedJourney(data) {
             Math.floor(Math.random() * slots.length)
         ];
 
+        const idempotencyStartedAt = Date.now();
+        const idempotencyKey =
+            idempotencyMode === 'off'
+                ? null
+                : uuidV4();
+
+        if (idempotencyKey !== null) {
+            mixedIdempotencyKeysSent.add(1, tags);
+        }
+
         const reservationResult = reserveSlot(
             user.authorization,
             selectedSlot.id,
-            tags
+            tags,
+            idempotencyKey
         );
 
+        const cleanupReservationIds = new Set();
+        if (reservationResult.success) {
+            cleanupReservationIds.add(
+                reservationResult.reservationId
+            );
+        }
+
+        let replayMismatch = false;
         if (
-            action === 'cancel' &&
-            reservationResult.success
+            idempotencyMode === 'retry' &&
+            reservationResult.success &&
+            Math.random() < idempotencyRetryRate
         ) {
-            cancelReservation(
+            const replayResult = replayReservation(
                 user.authorization,
-                reservationResult.reservationId,
+                selectedSlot.id,
+                idempotencyKey,
+                reservationResult,
+                tags
+            );
+            replayMismatch = !replayResult.success;
+
+            if (replayResult.reservationId !== null) {
+                cleanupReservationIds.add(
+                    replayResult.reservationId
+                );
+            }
+        }
+
+        if (idempotencyMode !== 'off') {
+            mixedReservationIdempotentJourneyDuration.add(
+                Date.now() - idempotencyStartedAt,
+                tags
+            );
+        }
+
+        const mustCleanMismatch =
+            replayMismatch &&
+            cleanupReservationIds.size > 1;
+        if (
+            reservationResult.success &&
+            (action === 'cancel' || mustCleanMismatch)
+        ) {
+            cleanupReservations(
+                user.authorization,
+                cleanupReservationIds,
                 tags
             );
         }
@@ -333,15 +441,27 @@ function browseSlots(authorization, window, tags) {
     );
 }
 
-function reserveSlot(authorization, slotId, tags) {
+function reserveSlot(
+    authorization,
+    slotId,
+    tags,
+    idempotencyKey
+) {
+    const requestBody = JSON.stringify({slotId});
+    const headers = {
+        Authorization: authorization,
+        'Content-Type': 'application/json',
+    };
+
+    if (idempotencyKey !== null) {
+        headers['Idempotency-Key'] = idempotencyKey;
+    }
+
     const response = http.post(
         `${BASE_URL}/api/reservations`,
-        JSON.stringify({slotId}),
+        requestBody,
         {
-            headers: {
-                Authorization: authorization,
-                'Content-Type': 'application/json',
-            },
+            headers,
             tags: {
                 ...tags,
                 operation: 'reserve',
@@ -381,6 +501,18 @@ function reserveSlot(authorization, slotId, tags) {
         response.timings.duration,
         tags
     );
+    if (idempotencyMode === 'unique') {
+        mixedReservationIdempotentUniqueDuration.add(
+            response.timings.duration,
+            tags
+        );
+    }
+    if (idempotencyMode === 'retry') {
+        mixedReservationIdempotentFirstDuration.add(
+            response.timings.duration,
+            tags
+        );
+    }
     reservationTechnicalErrorRate.add(
         technicalError,
         tags
@@ -398,7 +530,117 @@ function reserveSlot(authorization, slotId, tags) {
     return {
         success,
         reservationId: success ? body.id : null,
+        response,
+        body,
+        requestBody,
     };
+}
+
+function replayReservation(
+    authorization,
+    slotId,
+    idempotencyKey,
+    firstResult,
+    tags
+) {
+    mixedIdempotencyReplaysAttempted.add(1, tags);
+
+    const response = http.post(
+        `${BASE_URL}/api/reservations`,
+        firstResult.requestBody,
+        {
+            headers: {
+                Authorization: authorization,
+                'Content-Type': 'application/json',
+                'Idempotency-Key': idempotencyKey,
+            },
+            tags: {
+                ...tags,
+                operation: 'idempotency_replay',
+            },
+            timeout: requestTimeout,
+        }
+    );
+    mixedReservationIdempotentReplayDuration.add(
+        response.timings.duration,
+        tags
+    );
+
+    const body = parseJson(response);
+    const conflictCode = extractErrorCode(body);
+    const firstStable = stableReservation(
+        firstResult.body,
+        slotId
+    );
+    const replayStable = stableReservation(body, slotId);
+    const responseMismatch =
+        firstStable === null ||
+        replayStable === null ||
+        !sameStableReservation(
+            firstStable,
+            replayStable
+        );
+    const forbiddenConflict =
+        response.status === 409 &&
+        (
+            EXPECTED_CONFLICT_CODES.has(conflictCode) ||
+            conflictCode === 'IDEMPOTENCY_KEY_REUSED'
+        );
+    const success =
+        response.status === firstResult.response.status &&
+        !forbiddenConflict &&
+        !responseMismatch;
+
+    check(response, {
+        'idempotency replay returned first status': () =>
+            response.status === firstResult.response.status,
+        'idempotency replay returned same reservation': () =>
+            !responseMismatch,
+        'idempotency replay avoided conflicts': () =>
+            !forbiddenConflict,
+    });
+
+    mixedIdempotencyReplaysFailed.add(!success, tags);
+    mixedIdempotencyResponseMismatches.add(
+        responseMismatch,
+        tags
+    );
+    reservationTechnicalErrorRate.add(!success, {
+        ...tags,
+        operation: 'idempotency_replay',
+    });
+
+    if (success) {
+        mixedIdempotencyReplaysSucceeded.add(1, tags);
+    }
+
+    return {
+        success,
+        reservationId:
+            replayStable === null
+                ? null
+                : replayStable.id,
+    };
+}
+
+function cleanupReservations(
+    authorization,
+    reservationIds,
+    tags
+) {
+    for (const reservationId of reservationIds) {
+        const cleaned = cancelReservation(
+            authorization,
+            reservationId,
+            tags
+        );
+        if (idempotencyMode === 'retry') {
+            mixedIdempotencyCleanupFailures.add(
+                !cleaned,
+                tags
+            );
+        }
+    }
 }
 
 function cancelReservation(
@@ -437,6 +679,8 @@ function cancelReservation(
     if (success) {
         cancellationSuccesses.add(1, tags);
     }
+
+    return success;
 }
 
 function selectJourneyAction() {
@@ -489,6 +733,9 @@ function buildTags(window) {
         journey_from: window.from,
         target_vus: String(targetVus),
         limit: String(limit),
+        idempotency_mode: idempotencyMode,
+        idempotency_retry_rate:
+            String(idempotencyRetryRate),
     };
 }
 
@@ -499,6 +746,26 @@ function validateConfiguration() {
     ) {
         fail(
             'WORKLOAD_MODE must be hotspot or distributed'
+        );
+    }
+
+    if (
+        idempotencyMode !== 'off' &&
+        idempotencyMode !== 'unique' &&
+        idempotencyMode !== 'retry'
+    ) {
+        fail(
+            'IDEMPOTENCY_MODE must be off, unique, or retry'
+        );
+    }
+
+    if (
+        !Number.isFinite(idempotencyRetryRate) ||
+        idempotencyRetryRate < 0 ||
+        idempotencyRetryRate > 1
+    ) {
+        fail(
+            'IDEMPOTENCY_RETRY_RATE must be between 0 and 1'
         );
     }
 
@@ -678,4 +945,51 @@ function extractErrorCode(body) {
         body.error?.code ||
         null
     );
+}
+
+function stableReservation(body, expectedSlotId) {
+    if (
+        body === null ||
+        typeof body !== 'object' ||
+        !Number.isInteger(body.id) ||
+        body.id < 1 ||
+        body.slotId !== expectedSlotId ||
+        !Number.isInteger(body.userId) ||
+        body.userId < 1 ||
+        typeof body.startTime !== 'string' ||
+        typeof body.endTime !== 'string' ||
+        typeof body.createdAt !== 'string'
+    ) {
+        return null;
+    }
+
+    return body;
+}
+
+function sameStableReservation(first, second) {
+    return first.id === second.id &&
+        first.slotId === second.slotId &&
+        first.userId === second.userId &&
+        first.startTime === second.startTime &&
+        first.endTime === second.endTime &&
+        first.createdAt === second.createdAt;
+}
+
+function uuidV4() {
+    const bytes = new Uint8Array(crypto.randomBytes(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const hex = Array.from(
+        bytes,
+        (value) => value.toString(16).padStart(2, '0')
+    ).join('');
+
+    return [
+        hex.slice(0, 8),
+        hex.slice(8, 12),
+        hex.slice(12, 16),
+        hex.slice(16, 20),
+        hex.slice(20),
+    ].join('-');
 }
