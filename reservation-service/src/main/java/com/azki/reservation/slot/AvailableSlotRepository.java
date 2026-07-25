@@ -10,6 +10,7 @@ import com.azki.reservation.slot.dto.AvailableSlotResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface AvailableSlotRepository
         extends JpaRepository<AvailableSlotEntity, Long> {
@@ -75,6 +76,18 @@ public interface AvailableSlotRepository
             @Param("now") LocalDateTime now
     );
 
+    @Query("""
+            select new com.azki.reservation.slot.SlotReservationState(
+                    slot.id,
+                    slot.startTime,
+                    slot.reserved
+            )
+            from AvailableSlotEntity slot
+            where slot.id = :slotId
+            """)
+    Optional<SlotReservationState> findReservationStateById(
+            @Param("slotId") Long slotId
+    );
 
     @Modifying(
             flushAutomatically = true,

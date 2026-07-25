@@ -36,6 +36,10 @@ public enum ErrorCode {
             HttpStatus.CONFLICT,
             "Slot is no longer available"
     ),
+    SLOT_EXPIRED(
+            HttpStatus.CONFLICT,
+            "Slot has expired"
+    ),
     INVALID_IDEMPOTENCY_KEY(
             HttpStatus.BAD_REQUEST,
             "Idempotency-Key must be a valid UUID"

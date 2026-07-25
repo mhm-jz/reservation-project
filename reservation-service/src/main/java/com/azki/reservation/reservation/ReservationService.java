@@ -3,13 +3,14 @@ package com.azki.reservation.reservation;
 import com.azki.reservation.common.exception.IdempotencyKeyReusedException;
 import com.azki.reservation.common.exception.ReservationNotFoundException;
 import com.azki.reservation.common.exception.ReservationStateException;
-import com.azki.reservation.common.exception.SlotAlreadyReservedException;
+import com.azki.reservation.common.exception.SlotExpiredException;
 import com.azki.reservation.common.exception.SlotNotFoundException;
 import com.azki.reservation.common.exception.SlotUnavailableException;
 import com.azki.reservation.reservation.mapper.ReservationMapper;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import com.azki.reservation.slot.AvailableSlotEntity;
 import com.azki.reservation.slot.AvailableSlotRepository;
+import com.azki.reservation.slot.SlotReservationState;
 import com.azki.reservation.slot.SlotAvailabilityChangedEvent;
 import com.azki.reservation.user.UserEntity;
 import com.azki.reservation.user.UserRepository;
@@ -38,8 +39,9 @@ public class ReservationService {
             Long slotId,
             Long userId
     ) {
+        LocalDateTime now = LocalDateTime.now();
         ReservationCreationResult result =
-                executeReservationCreation(slotId, userId);
+                executeReservationCreation(slotId, userId, now);
 
         publishSlotAvailabilityChanged(result.slotDay());
         return result.response();
@@ -51,12 +53,13 @@ public class ReservationService {
             Long userId,
             UUID idempotencyKey
     ) {
+        LocalDateTime now = LocalDateTime.now();
         String key = idempotencyKey.toString();
         int claimed = idempotencyRepository.claim(
                 userId,
                 key,
                 slotId,
-                LocalDateTime.now()
+                now
         );
 
         if (claimed == 0) {
@@ -64,7 +67,7 @@ public class ReservationService {
         }
 
         ReservationCreationResult result =
-                executeReservationCreation(slotId, userId);
+                executeReservationCreation(slotId, userId, now);
         ReservationResponse response = result.response();
 
         int completed = idempotencyRepository.complete(
@@ -87,9 +90,9 @@ public class ReservationService {
 
     private ReservationCreationResult executeReservationCreation(
             Long slotId,
-            Long userId
+            Long userId,
+            LocalDateTime now
     ) {
-        LocalDateTime now = LocalDateTime.now();
         reserveSlotOrThrow(slotId, now);
 
         AvailableSlotEntity slot = loadSlot(slotId);
@@ -139,14 +142,20 @@ public class ReservationService {
     ) {
         int updatedRows = slotRepository.reserveIfAvailable(slotId, now);
         if (updatedRows == 0) {
-            throwSlotReservationError(slotId);
+            throwSlotReservationError(slotId, now);
         }
     }
 
-    private void throwSlotReservationError(Long slotId) {
-        AvailableSlotEntity slot = loadSlot(slotId);
-        if (slot.isReserved()) {
-            throw new SlotAlreadyReservedException(slotId);
+    private void throwSlotReservationError(
+            Long slotId,
+            LocalDateTime now
+    ) {
+        SlotReservationState slot = slotRepository
+                .findReservationStateById(slotId)
+                .orElseThrow(() -> new SlotNotFoundException(slotId));
+
+        if (slot.startTime().isBefore(now)) {
+            throw new SlotExpiredException(slotId);
         }
         throw new SlotUnavailableException(slotId);
     }

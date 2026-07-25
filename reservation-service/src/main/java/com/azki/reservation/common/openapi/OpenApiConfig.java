@@ -205,15 +205,15 @@ public class OpenApiConfig {
                         errorResponse(
                                 "The slot cannot be reserved",
                                 orderedExamples(
-                                        "slotAlreadyReserved",
-                                        errorExample(
-                                                ErrorCode.SLOT_ALREADY_RESERVED,
-                                                "Slot is already reserved: 42"
-                                        ),
                                         "slotUnavailable",
                                         errorExample(
                                                 ErrorCode.SLOT_UNAVAILABLE,
                                                 "Slot is no longer available: 42"
+                                        ),
+                                        "slotExpired",
+                                        errorExample(
+                                                ErrorCode.SLOT_EXPIRED,
+                                                "Slot has expired: 42"
                                         ),
                                         "idempotencyKeyReused",
                                         errorExample(
