@@ -200,14 +200,42 @@ clear_slot_cache() {
   local pattern
   local key
   local deleted=0
+  local batch_size="${REDIS_UNLINK_BATCH_SIZE:-500}"
+  local -a keys=()
 
-  for pattern in 'slots:version:*' 'slots:head:*' 'slots:head-lock:*'; do
-    while IFS= read -r key; do
-      [[ -z "$key" ]] && continue
-      docker exec "$REDIS_CONTAINER" redis-cli UNLINK "$key" >/dev/null
-      ((deleted += 1))
-    done < <(docker exec "$REDIS_CONTAINER" redis-cli --scan --pattern "$pattern")
-  done
+  echo "Clearing Redis slot cache in batches..."
+
+  while IFS= read -r key; do
+    [[ -z "$key" ]] && continue
+
+    keys+=("$key")
+
+    if (( ${#keys[@]} >= batch_size )); then
+      docker exec "$REDIS_CONTAINER" \
+        redis-cli UNLINK "${keys[@]}" >/dev/null
+
+      deleted=$((deleted + ${#keys[@]}))
+      keys=()
+    fi
+  done < <(
+    for pattern in \
+      'slots:version:*' \
+      'slots:head:*' \
+      'slots:head-lock:*'
+    do
+      docker exec "$REDIS_CONTAINER" \
+        redis-cli --scan --pattern "$pattern"
+    done |
+      awk 'NF' |
+      sort -u
+  )
+
+  if (( ${#keys[@]} > 0 )); then
+    docker exec "$REDIS_CONTAINER" \
+      redis-cli UNLINK "${keys[@]}" >/dev/null
+
+    deleted=$((deleted + ${#keys[@]}))
+  fi
 
   echo "Deleted $deleted slot-cache Redis key(s)."
 }
@@ -296,19 +324,44 @@ run_level() {
     performance/scripts/reservation-flow.js; then
     mv -f -- "$temporary_result_file" "$result_file"
     echo "Mixed ${WORKLOAD_MODE} test passed for ${vus} VUs."
-  else
-    local status=$?
-    rm -f -- "$temporary_result_file"
-    echo "Previous successful result preserved: $result_file" >&2
+else
+  local status=$?
+  local failed_result_file
 
-    if [[ "$status" -eq 99 ]]; then
-      echo "WARNING: k6 thresholds failed for ${vus} VUs; continuing." >&2
-      overall_exit_code=99
+  if [[ "$status" -eq 99 ]]; then
+    failed_result_file="${result_file%.json}-threshold-failed.json"
+
+    if [[ -s "$temporary_result_file" ]]; then
+      mv -f -- "$temporary_result_file" "$failed_result_file"
+
+      echo "WARNING: k6 thresholds failed for ${vus} VUs." >&2
+      echo "Threshold-failed result saved to:" >&2
+      echo "$failed_result_file" >&2
     else
-      echo "k6 failed with exit code $status." >&2
-      exit "$status"
+      rm -f -- "$temporary_result_file"
+
+      echo "WARNING: k6 thresholds failed, but no summary file was generated." >&2
     fi
+
+    if [[ -e "$result_file" ]]; then
+      echo "Previous successful result preserved:" >&2
+      echo "$result_file" >&2
+    fi
+
+    overall_exit_code=99
+  else
+    rm -f -- "$temporary_result_file"
+
+    echo "k6 failed with exit code $status." >&2
+
+    if [[ -e "$result_file" ]]; then
+      echo "Previous successful result preserved:" >&2
+      echo "$result_file" >&2
+    fi
+
+    exit "$status"
   fi
+fi
 }
 
 validate_environment

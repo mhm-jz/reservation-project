@@ -39,14 +39,42 @@ clear_slot_cache() {
   local pattern
   local key
   local deleted=0
+  local batch_size="${REDIS_UNLINK_BATCH_SIZE:-500}"
+  local -a keys=()
 
-  for pattern in 'slots:version:*' 'slots:head:*' 'slots:head-lock:*'; do
-    while IFS= read -r key; do
-      [[ -z "$key" ]] && continue
-      docker exec "$REDIS_CONTAINER" redis-cli UNLINK "$key" >/dev/null
-      ((deleted += 1))
-    done < <(docker exec "$REDIS_CONTAINER" redis-cli --scan --pattern "$pattern")
-  done
+  echo "Clearing Redis slot cache in batches..."
+
+  while IFS= read -r key; do
+    [[ -z "$key" ]] && continue
+
+    keys+=("$key")
+
+    if (( ${#keys[@]} >= batch_size )); then
+      docker exec "$REDIS_CONTAINER" \
+        redis-cli UNLINK "${keys[@]}" >/dev/null
+
+      deleted=$((deleted + ${#keys[@]}))
+      keys=()
+    fi
+  done < <(
+    for pattern in \
+      'slots:version:*' \
+      'slots:head:*' \
+      'slots:head-lock:*'
+    do
+      docker exec "$REDIS_CONTAINER" \
+        redis-cli --scan --pattern "$pattern"
+    done |
+      awk 'NF' |
+      sort -u
+  )
+
+  if (( ${#keys[@]} > 0 )); then
+    docker exec "$REDIS_CONTAINER" \
+      redis-cli UNLINK "${keys[@]}" >/dev/null
+
+    deleted=$((deleted + ${#keys[@]}))
+  fi
 
   echo "Deleted $deleted slot-cache Redis key(s)."
 }
@@ -69,6 +97,10 @@ count_head_cache_keys() {
 run_level() {
   local vus="$1"
   local result_file="$RESULT_DIR/results-deep-vus-${vus}.json"
+  local failed_result_file="${result_file%.json}-threshold-failed.json"
+  local temporary_result_file
+
+  temporary_result_file="$(mktemp "${result_file}.tmp.XXXXXX")"
 
   echo
   echo "Running deep-cursor read test"
@@ -80,7 +112,7 @@ run_level() {
   clear_slot_cache
 
   if k6 run \
-    --summary-export="$result_file" \
+    --summary-export="$temporary_result_file" \
     -e BASE_URL="$BASE_URL" \
     -e PAGE_TYPE=deep \
     -e FROM="$FROM" \
@@ -91,14 +123,45 @@ run_level() {
     -e TEST_DURATION="$TEST_DURATION" \
     -e WARM_UP_DURATION="$WARM_UP_DURATION" \
     performance/scripts/slots.js; then
+
+    mv -f -- "$temporary_result_file" "$result_file"
+    rm -f -- "$failed_result_file"
+
     echo "Deep-cursor test passed for ${vus} VUs."
+    echo "Successful result saved to: $result_file"
+
   else
     local status=$?
+
     if [[ "$status" -eq 99 ]]; then
-      echo "WARNING: k6 thresholds failed for ${vus} VUs; continuing." >&2
+      if [[ -s "$temporary_result_file" ]]; then
+        mv -f -- "$temporary_result_file" "$failed_result_file"
+
+        echo "WARNING: k6 thresholds failed for ${vus} VUs." >&2
+        echo "Threshold-failed result saved to:" >&2
+        echo "$failed_result_file" >&2
+      else
+        rm -f -- "$temporary_result_file"
+
+        echo "WARNING: thresholds failed, but no summary file was generated." >&2
+      fi
+
+      if [[ -e "$result_file" ]]; then
+        echo "Previous successful result preserved:" >&2
+        echo "$result_file" >&2
+      fi
+
       overall_exit_code=99
     else
+      rm -f -- "$temporary_result_file"
+
       echo "k6 failed with exit code $status." >&2
+
+      if [[ -e "$result_file" ]]; then
+        echo "Previous successful result preserved:" >&2
+        echo "$result_file" >&2
+      fi
+
       exit "$status"
     fi
   fi
