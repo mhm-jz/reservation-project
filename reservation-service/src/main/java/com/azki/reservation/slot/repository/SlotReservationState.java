@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 
 public record SlotReservationState(
         Long id,
-        LocalDateTime startTime,
-        boolean reserved
+        LocalDateTime startTime
 ) {
 }
