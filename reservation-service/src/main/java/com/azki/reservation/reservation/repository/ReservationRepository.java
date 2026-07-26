@@ -11,8 +11,6 @@ import java.util.Optional;
 public interface ReservationRepository
         extends JpaRepository<ReservationEntity, Long> {
 
-    boolean existsBySlot_Id(Long slotId);
-
     @Query("""
             select new com.azki.reservation.reservation.repository.OwnedReservationSlot(
                     reservation.slot.id,
