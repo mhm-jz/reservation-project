@@ -81,7 +81,7 @@ public class SlotDayHeadCache {
             LocalDate day,
             String version,
             String dataKey
-    ) throws Exception {
+    )  {
         String lockKey = lockKey(day, version);
         String lockToken = UUID.randomUUID().toString();
         Boolean acquired = redisTemplate.opsForValue()

@@ -3,7 +3,6 @@ package com.azki.reservation.security.handler;
 import com.azki.reservation.common.exception.ErrorResponse;
 import com.azki.reservation.common.exception.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +28,7 @@ public class RestAuthenticationEntryPoint
             HttpServletRequest request,
             HttpServletResponse response,
             AuthenticationException authException
-    ) throws IOException, ServletException {
+    ) throws IOException {
 
         ErrorCode errorCode = ErrorCode.UNAUTHORIZED;
         ErrorResponse error = new ErrorResponse(

@@ -80,8 +80,7 @@ public interface AvailableSlotRepository
     @Query("""
             select new com.azki.reservation.slot.repository.SlotReservationState(
                     slot.id,
-                    slot.startTime,
-                    slot.reserved
+                    slot.startTime
             )
             from AvailableSlotEntity slot
             where slot.id = :slotId

@@ -1,7 +1,9 @@
 package com.azki.reservation.common.exception;
 
+import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+@Getter
 public enum ErrorCode {
 
     VALIDATION_ERROR(
@@ -27,10 +29,6 @@ public enum ErrorCode {
     SLOT_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "Slot not found"
-    ),
-    SLOT_ALREADY_RESERVED(
-            HttpStatus.CONFLICT,
-            "Slot is already reserved"
     ),
     SLOT_UNAVAILABLE(
             HttpStatus.CONFLICT,
@@ -72,11 +70,4 @@ public enum ErrorCode {
         this.defaultMessage = defaultMessage;
     }
 
-    public HttpStatus getHttpStatus() {
-        return httpStatus;
-    }
-
-    public String getDefaultMessage() {
-        return defaultMessage;
-    }
 }

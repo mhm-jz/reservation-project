@@ -44,16 +44,14 @@ public class UserEntity {
 
     @Column(
             name = "email",
-            nullable = false,
-            length = 255
+            nullable = false
     )
     private String email;
 
 
     @Column(
             name = "password",
-            nullable = false,
-            length = 255
+            nullable = false
     )
     private String passwordHash;
 

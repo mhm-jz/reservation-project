@@ -33,28 +33,4 @@ public class AvailableSlotEntity {
 
     @Column(name = "is_reserved", nullable = false)
     private boolean reserved;
-
-    @Column(
-            name = "created_at",
-            nullable = false,
-            updatable = false
-    )
-    private LocalDateTime createdAt;
-
-    public AvailableSlotEntity(
-            LocalDateTime startTime,
-            LocalDateTime endTime,
-            LocalDateTime createdAt
-    ) {
-        if (!endTime.isAfter(startTime)) {
-            throw new IllegalArgumentException(
-                    "Slot end time must be after start time"
-            );
-        }
-
-        this.startTime = startTime;
-        this.endTime = endTime;
-        this.reserved = false;
-        this.createdAt = createdAt;
-    }
 }

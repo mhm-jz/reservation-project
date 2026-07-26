@@ -232,14 +232,6 @@ public class ReservationService {
         return new ReservationEntity(user, slot, createdAt);
     }
 
-    private void publishSlotAvailabilityChanged(
-            AvailableSlotEntity slot
-    ) {
-        publishSlotAvailabilityChanged(
-                slot.getStartTime().toLocalDate()
-        );
-    }
-
     private void publishSlotAvailabilityChanged(LocalDate day) {
         eventPublisher.publishEvent(
                 new SlotAvailabilityChangedEvent(day)

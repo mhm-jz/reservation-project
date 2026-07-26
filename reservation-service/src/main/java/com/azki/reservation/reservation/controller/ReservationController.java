@@ -1,7 +1,6 @@
 package com.azki.reservation.reservation.controller;
 
 import com.azki.reservation.common.exception.InvalidIdempotencyKeyException;
-import com.azki.reservation.common.openapi.OpenApiConfig;
 import com.azki.reservation.reservation.dto.CreateReservationRequest;
 import com.azki.reservation.reservation.dto.ReservationResponse;
 import com.azki.reservation.reservation.service.ReservationService;
@@ -13,7 +12,6 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
